@@ -3,16 +3,22 @@ import { getSetting, getUserById } from '@/lib/db';
 import { apiSuccess, apiError } from '@/lib/utils';
 import { compare } from '@/lib/bcrypt';
 
+/** Generate a random hex CSRF token */
+function newCsrfToken(): string {
+  const array = new Uint8Array(32);
+  crypto.getRandomValues(array);
+  return Array.from(array, b => b.toString(16).padStart(2, '0')).join('');
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { login_type, user_id, password, remember_me } = body;
+    const { login_type, user_id, password } = body;
 
     const session = await getSession();
 
     // Rate limiting
     const now = Math.floor(Date.now() / 1000);
-    const attempts = session.loginAttempts ?? 0;
     const lastAttempt = session.loginLastAttempt ?? 0;
 
     if (now - lastAttempt > 900) {
@@ -34,12 +40,13 @@ export async function POST(request: Request) {
         return apiError('Incorrect admin password.');
       }
 
-      // Success
+      // Success — generate CSRF token here (Route Handler can modify cookies)
       session.loginAttempts = undefined;
       session.loginLastAttempt = undefined;
       session.isAdmin = true;
       session.userName = 'Administrator';
       session.lastActivity = now;
+      session.csrfToken = newCsrfToken();
       await session.save();
       return apiSuccess({ redirect: '/admin' });
     }
@@ -62,7 +69,7 @@ export async function POST(request: Request) {
         return apiError('User not found.');
       }
 
-      // Success
+      // Success — generate CSRF token here
       session.loginAttempts = undefined;
       session.loginLastAttempt = undefined;
       session.userId = user.id;
@@ -70,13 +77,7 @@ export async function POST(request: Request) {
       session.boatId = user.boat_id;
       session.isAdmin = false;
       session.lastActivity = now;
-
-      if (remember_me) {
-        // iron-session handles cookie expiry via cookieOptions
-        // For remember me, we'd extend it but iron-session doesn't support
-        // per-request overrides easily, so we rely on the default 24h
-      }
-
+      session.csrfToken = newCsrfToken();
       await session.save();
       return apiSuccess({ redirect: '/dashboard' });
     }

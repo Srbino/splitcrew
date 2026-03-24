@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -60,6 +60,9 @@ export default function Layout({ children, user, csrfToken, baseCurrency }: Layo
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
 
+  const desktopFileInputRef = useRef<HTMLInputElement>(null);
+  const mobileFileInputRef = useRef<HTMLInputElement>(null);
+
   const activePage = pathname.split('/')[1] || 'dashboard';
 
   useEffect(() => {
@@ -81,6 +84,29 @@ export default function Layout({ children, user, csrfToken, baseCurrency }: Layo
   async function handleLogout() {
     await fetch('/api/auth/logout', { method: 'POST' });
     router.push('/');
+  }
+
+  async function uploadAvatar(file: File) {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch('/api/avatar', {
+      method: 'POST',
+      headers: { 'X-CSRF-Token': csrfToken },
+      body: formData,
+    });
+    const data = await res.json();
+    if (data.success) {
+      window.location.reload();
+    }
+  }
+
+  function handleAvatarFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) {
+      uploadAvatar(file);
+    }
+    // Reset the input so the same file can be re-selected
+    e.target.value = '';
   }
 
   // Close dropdown on outside click
@@ -120,6 +146,22 @@ export default function Layout({ children, user, csrfToken, baseCurrency }: Layo
     <>
       <meta name="csrf-token" content={csrfToken} />
 
+      {/* Hidden file inputs for avatar upload */}
+      <input
+        ref={desktopFileInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        style={{ display: 'none' }}
+        onChange={handleAvatarFileChange}
+      />
+      <input
+        ref={mobileFileInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        style={{ display: 'none' }}
+        onChange={handleAvatarFileChange}
+      />
+
       {/* Top bar */}
       <header className="top-bar">
         <Link href="/dashboard" className="top-bar-logo">
@@ -140,8 +182,39 @@ export default function Layout({ children, user, csrfToken, baseCurrency }: Layo
             {userDropdownOpen && (
               <div className="user-dropdown" style={{ display: 'block' }}>
                 <div className="user-dropdown-header">
-                  <div className="user-dropdown-avatar">
+                  <div
+                    className="user-dropdown-avatar"
+                    onClick={() => desktopFileInputRef.current?.click()}
+                    style={{ position: 'relative', cursor: 'pointer' }}
+                    role="button"
+                    tabIndex={0}
+                    aria-label="Change avatar"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        desktopFileInputRef.current?.click();
+                      }
+                    }}
+                  >
                     <Avatar name={user.name} avatar={user.avatar} size="lg" />
+                    <span
+                      style={{
+                        position: 'absolute',
+                        bottom: 0,
+                        right: 0,
+                        width: 24,
+                        height: 24,
+                        borderRadius: '50%',
+                        background: 'var(--color-primary, #007aff)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        border: '2px solid var(--color-bg, #fff)',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
+                      }}
+                    >
+                      <Camera size={12} color="#fff" />
+                    </span>
                   </div>
                   <div className="user-dropdown-name">{user.name}</div>
                   {user.boatName && (
@@ -231,8 +304,39 @@ export default function Layout({ children, user, csrfToken, baseCurrency }: Layo
         <div className="mobile-menu-content">
           <div className="drawer-header">
             <div className="drawer-header-user">
-              <div className="drawer-avatar-wrap">
+              <div
+                className="drawer-avatar-wrap"
+                onClick={() => mobileFileInputRef.current?.click()}
+                style={{ position: 'relative', cursor: 'pointer' }}
+                role="button"
+                tabIndex={0}
+                aria-label="Change avatar"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    mobileFileInputRef.current?.click();
+                  }
+                }}
+              >
                 <Avatar name={user.name} avatar={user.avatar} size="lg" />
+                <span
+                  style={{
+                    position: 'absolute',
+                    bottom: 0,
+                    right: 0,
+                    width: 24,
+                    height: 24,
+                    borderRadius: '50%',
+                    background: 'var(--color-primary, #007aff)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    border: '2px solid var(--color-bg, #fff)',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
+                  }}
+                >
+                  <Camera size={12} color="#fff" />
+                </span>
               </div>
               <div>
                 <div style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--color-text)' }}>

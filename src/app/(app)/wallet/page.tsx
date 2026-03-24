@@ -99,12 +99,6 @@ async function apiCall<T = unknown>(
   return res.json();
 }
 
-function getCurrentUserId(): number {
-  // Extract from the layout-rendered data attribute or meta
-  // The layout passes user data via context; we read from meta as fallback
-  return 0; // Will be set from user data
-}
-
 // ── Main Page Component ──
 
 type TabId = 'expenses' | 'balances' | 'settlements';
@@ -680,7 +674,7 @@ function ExpensesTab({
   return (
     <div>
       {/* Filter buttons */}
-      <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
         {filters.map(f => (
           <button
             key={f.id}
@@ -703,7 +697,7 @@ function ExpensesTab({
           <p>{t('wallet.noExpenses')}</p>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {expenses.map(expense => (
             <ExpenseCard
               key={expense.id}
@@ -743,7 +737,7 @@ function ExpenseCard({
 
   return (
     <div className="card expense-card" style={{ cursor: 'pointer' }} onClick={onEdit}>
-      <div className="card-body" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px' }}>
+      <div className="card-body" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px 20px' }}>
         {/* Avatar */}
         <Avatar
           name={expense.paid_by_name}
@@ -897,15 +891,15 @@ function BalancesTab({
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       {/* Header row */}
       <div
         className="balance-row"
         style={{
           display: 'grid',
           gridTemplateColumns: '1fr 90px 90px 90px',
-          gap: 8,
-          padding: '8px 16px',
+          gap: 16,
+          padding: '10px 20px',
           fontSize: '0.75rem',
           fontWeight: 600,
           color: 'var(--color-text-secondary)',
@@ -930,9 +924,9 @@ function BalancesTab({
             style={{
               display: 'grid',
               gridTemplateColumns: '1fr 90px 90px 90px',
-              gap: 8,
+              gap: 16,
               alignItems: 'center',
-              padding: '12px 16px',
+              padding: '16px 20px',
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
@@ -1015,17 +1009,17 @@ function SettlementsTab({
   );
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       {settlements.map((s, idx) => (
         <div
           key={`${s.from_user_id}-${s.to_user_id}`}
           className={`card settlement-item-v2 ${s.is_settled ? 'settled' : ''}`}
           style={{
             opacity: s.is_settled ? 0.6 : 1,
-            padding: '14px 16px',
+            padding: '18px 20px',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
             {/* From user */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
               <Avatar name={s.from_name} avatar={s.from_avatar} size="sm" userId={s.from_user_id} />

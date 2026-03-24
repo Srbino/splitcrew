@@ -24,6 +24,7 @@
     "@types/pg": "^8.20.0",
     "@types/react": "^19.2.14",
     "bcryptjs": "^3.0.3",
+    "framer-motion": "^12.38.0",
     "iron-session": "^8.0.4",
     "lucide-react": "^1.0.1",
     "next": "^16.2.1",

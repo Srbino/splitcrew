@@ -55,15 +55,25 @@ export function isAdmin(session: SessionData): boolean {
   return !!session.isAdmin;
 }
 
-/** Generate or return existing CSRF token */
-export async function getCsrfToken(): Promise<string> {
+/**
+ * Read the existing CSRF token from session (safe in Server Components).
+ * Token is generated at login time — see login route.
+ */
+export async function readCsrfToken(): Promise<string> {
   const session = await getSession();
-  if (!session.csrfToken) {
-    const array = new Uint8Array(32);
-    crypto.getRandomValues(array);
-    session.csrfToken = Array.from(array, b => b.toString(16).padStart(2, '0')).join('');
-    await session.save();
-  }
+  return session.csrfToken || '';
+}
+
+/**
+ * Generate a new CSRF token and save to session.
+ * Only call this in Route Handlers / Server Actions (NOT in Server Components).
+ */
+export async function generateCsrfToken(): Promise<string> {
+  const session = await getSession();
+  const array = new Uint8Array(32);
+  crypto.getRandomValues(array);
+  session.csrfToken = Array.from(array, b => b.toString(16).padStart(2, '0')).join('');
+  await session.save();
   return session.csrfToken;
 }
 
@@ -71,7 +81,6 @@ export async function getCsrfToken(): Promise<string> {
 export async function verifyCsrf(token: string): Promise<boolean> {
   const session = await getSession();
   if (!session.csrfToken || !token) return false;
-  // Constant-time comparison
   const a = new TextEncoder().encode(session.csrfToken);
   const b = new TextEncoder().encode(token);
   if (a.length !== b.length) return false;

@@ -1,4 +1,4 @@
-import { requireAuth, getCsrfToken } from '@/lib/auth';
+import { requireAuth, readCsrfToken } from '@/lib/auth';
 import { getUserById, getSetting } from '@/lib/db';
 import { query } from '@/lib/db';
 import Layout from '@/components/Layout';
@@ -12,7 +12,7 @@ export default async function AppLayout({
   children: React.ReactNode;
 }) {
   const session = await requireAuth();
-  const csrfToken = await getCsrfToken();
+  const csrfToken = await readCsrfToken();
 
   // Get app settings
   const locale = (await getSetting('language', 'en')) as LocaleCode;
