@@ -37,8 +37,14 @@ export async function getExchangeRateForDate(
 ): Promise<number> {
   if (baseCurrency === foreignCurrency) return 1;
 
+  // Try date-specific rate first
   const rates = await getDailyRates(baseCurrency, date);
-  return rates[foreignCurrency] ?? 0;
+  if (rates[foreignCurrency]) return rates[foreignCurrency];
+
+  // Fallback: use live/cached rates (latest available)
+  console.warn(`[exchange] No daily rate for ${foreignCurrency} on ${date}, falling back to live rates`);
+  const liveRates = await getExchangeRates(baseCurrency);
+  return liveRates[foreignCurrency] ?? 0;
 }
 
 /**
@@ -187,6 +193,7 @@ async function getDailyRates(baseCurrency: string, date: string): Promise<Exchan
   }
 
   // 2. Fetch from Frankfurter API for this specific date
+  console.log(`[exchange] Fetching ${baseCurrency} rates for ${date}...`);
   const rates = await fetchRatesForDate(baseCurrency, date);
 
   if (rates && Object.keys(rates).length > 0) {
@@ -194,6 +201,7 @@ async function getDailyRates(baseCurrency: string, date: string): Promise<Exchan
     await upsertDailyRates(date, baseCurrency, rates);
     return rates;
   }
+  console.log(`[exchange] API failed for ${date}, trying DB fallbacks...`);
 
   // 3. Fallback: try the closest available date (before OR after target date)
   const fallbackBefore = await queryOne<{ rates: string; rate_date: string }>(
@@ -204,6 +212,7 @@ async function getDailyRates(baseCurrency: string, date: string): Promise<Exchan
   );
 
   if (fallbackBefore) {
+    console.log(`[exchange] Using earlier cached rate from ${fallbackBefore.rate_date}`);
     try {
       return JSON.parse(fallbackBefore.rates);
     } catch { /* corrupted */ }
@@ -218,12 +227,14 @@ async function getDailyRates(baseCurrency: string, date: string): Promise<Exchan
   );
 
   if (fallbackAfter) {
+    console.log(`[exchange] Using newer cached rate from ${fallbackAfter.rate_date}`);
     try {
       return JSON.parse(fallbackAfter.rates);
     } catch { /* corrupted */ }
   }
 
   // 4. Last resort: try fetching latest from API
+  console.log(`[exchange] No DB fallback, fetching latest from API...`);
   const latest = await fetchRatesForDate(baseCurrency, 'latest');
   if (latest && Object.keys(latest).length > 0) {
     await upsertDailyRates(date, baseCurrency, latest);
