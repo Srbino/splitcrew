@@ -2,6 +2,21 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Sailboat } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent } from '@/components/ui/card';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 
 interface UserOption {
   id: number;
@@ -25,13 +40,22 @@ export default function LoginPage() {
   const [adminPassword, setAdminPassword] = useState('');
 
   useEffect(() => {
-    fetch('/api/auth/users')
+    // Check if app is installed — redirect to setup wizard if not
+    fetch('/api/setup')
       .then(r => r.json())
       .then(d => {
-        if (d.success) setUsers(d.data);
+        if (d.success && !d.data?.installed) {
+          router.replace('/setup');
+          return;
+        }
+        // Load users for login dropdown
+        return fetch('/api/auth/users').then(r => r.json());
+      })
+      .then(d => {
+        if (d?.success) setUsers(d.data);
       })
       .catch(() => {});
-  }, []);
+  }, [router]);
 
   async function handleMemberLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -88,296 +112,156 @@ export default function LoginPage() {
   }
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 20,
-        background: 'var(--color-bg-subtle)',
-        fontFamily: 'var(--font-sans)',
-        color: 'var(--color-text)',
-      }}
-    >
-      <div
-        style={{
-          background: 'var(--color-bg)',
-          borderRadius: 'var(--radius-lg)',
-          padding: '40px 35px',
-          maxWidth: 420,
-          width: '100%',
-          border: '1px solid var(--color-border)',
-        }}
+    <div className="min-h-screen flex items-center justify-center p-5 bg-muted/50">
+      {/* Subtle ocean gradient accent */}
+      <div className="fixed inset-0 bg-gradient-to-br from-primary/5 via-transparent to-info/5 pointer-events-none" />
+
+      <motion.div
+        className="relative w-full max-w-[420px]"
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ type: 'spring', damping: 20, stiffness: 300 }}
       >
-        {/* Logo */}
-        <div style={{ textAlign: 'center', marginBottom: 10 }}>
-          <img
-            src="/img/logo.png"
-            alt="Logo"
-            style={{ width: 80, height: 80, objectFit: 'contain' }}
-          />
-        </div>
-        <h1
-          style={{
-            textAlign: 'center',
-            marginBottom: 28,
-            fontSize: '1.5rem',
-            color: 'var(--color-text)',
-          }}
-        >
-          CrewSplit
-        </h1>
-
-        {error && (
-          <div
-            style={{
-              background: 'var(--color-danger-subtle)',
-              border: '1px solid var(--color-danger)',
-              color: 'var(--color-danger)',
-              padding: 12,
-              borderRadius: 'var(--radius)',
-              marginBottom: 18,
-              textAlign: 'center',
-              fontSize: '0.9rem',
-            }}
-          >
-            {error}
-          </div>
-        )}
-
-        {/* Tab buttons */}
-        <div
-          style={{
-            display: 'flex',
-            marginBottom: 25,
-            borderRadius: 'var(--radius)',
-            overflow: 'hidden',
-            border: '1px solid var(--color-border)',
-          }}
-        >
-          <button
-            onClick={() => setTab('member')}
-            style={{
-              flex: 1,
-              padding: 12,
-              textAlign: 'center',
-              cursor: 'pointer',
-              fontWeight: 600,
-              fontSize: '0.95rem',
-              background: tab === 'member' ? 'var(--color-brand)' : 'var(--color-bg)',
-              color: tab === 'member' ? 'var(--color-brand-text)' : 'var(--color-text-secondary)',
-              border: 'none',
-              transition: 'all 0.2s',
-              fontFamily: 'inherit',
-            }}
-          >
-            Crew
-          </button>
-          <button
-            onClick={() => setTab('admin')}
-            style={{
-              flex: 1,
-              padding: 12,
-              textAlign: 'center',
-              cursor: 'pointer',
-              fontWeight: 600,
-              fontSize: '0.95rem',
-              background: tab === 'admin' ? 'var(--color-brand)' : 'var(--color-bg)',
-              color: tab === 'admin' ? 'var(--color-brand-text)' : 'var(--color-text-secondary)',
-              border: 'none',
-              transition: 'all 0.2s',
-              fontFamily: 'inherit',
-            }}
-          >
-            Admin
-          </button>
-        </div>
-
-        {/* Member login */}
-        {tab === 'member' && (
-          <>
-            {users.length === 0 ? (
-              <div
-                style={{
-                  textAlign: 'center',
-                  color: 'var(--color-text-secondary)',
-                  padding: 20,
-                  fontSize: '0.9rem',
-                }}
+        <Card className="border shadow-lg">
+          <CardContent className="px-8 py-10 sm:px-10">
+            {/* Logo */}
+            <div className="flex flex-col items-center mb-8">
+              <motion.div
+                className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-4"
+                initial={{ scale: 0.8, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ delay: 0.1, type: 'spring', damping: 15 }}
               >
-                No crew members have been added yet.
-                <br />
-                Log in as admin and add users.
-              </div>
-            ) : (
-              <form onSubmit={handleMemberLogin}>
-                <div style={{ marginBottom: 18 }}>
-                  <label
-                    style={{
-                      display: 'block',
-                      marginBottom: 6,
-                      fontWeight: 600,
-                      fontSize: '0.9rem',
-                    }}
-                  >
-                    Select your name
-                  </label>
-                  <select
-                    value={userId}
-                    onChange={e => setUserId(e.target.value)}
-                    required
-                    style={{
-                      width: '100%',
-                      padding: '10px 14px',
-                      border: '1px solid var(--color-border)',
-                      borderRadius: 'var(--radius)',
-                      fontSize: '1rem',
-                      fontFamily: 'inherit',
-                      background: 'var(--color-bg)',
-                      color: 'var(--color-text)',
-                    }}
-                  >
-                    <option value="">– select –</option>
-                    {users.map(u => (
-                      <option key={u.id} value={u.id}>
-                        {u.name} ({u.boat_name || 'no boat'})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div style={{ marginBottom: 18 }}>
-                  <label
-                    style={{
-                      display: 'block',
-                      marginBottom: 6,
-                      fontWeight: 600,
-                      fontSize: '0.9rem',
-                    }}
-                  >
-                    Crew password
-                  </label>
-                  <input
-                    type="password"
-                    value={memberPassword}
-                    onChange={e => setMemberPassword(e.target.value)}
-                    required
-                    placeholder="Enter shared password"
-                    style={{
-                      width: '100%',
-                      padding: '10px 14px',
-                      border: '1px solid var(--color-border)',
-                      borderRadius: 'var(--radius)',
-                      fontSize: '1rem',
-                      fontFamily: 'inherit',
-                      background: 'var(--color-bg)',
-                      color: 'var(--color-text)',
-                      boxSizing: 'border-box',
-                    }}
-                  />
-                </div>
-                <div style={{ marginBottom: 14 }}>
-                  <label
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8,
-                      fontWeight: 'normal',
-                      cursor: 'pointer',
-                      color: 'var(--color-text-secondary)',
-                    }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={rememberMe}
-                      onChange={e => setRememberMe(e.target.checked)}
-                      style={{ width: 'auto', accentColor: 'var(--color-brand)' }}
-                    />
-                    Remember me for 7 days
-                  </label>
-                </div>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="btn btn-primary"
-                  style={{
-                    display: 'block',
-                    width: '100%',
-                    padding: 12,
-                    background: 'var(--color-brand)',
-                    color: 'var(--color-brand-text)',
-                    border: 'none',
-                    borderRadius: 'var(--radius)',
-                    fontSize: '1rem',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    fontFamily: 'inherit',
-                    opacity: loading ? 0.7 : 1,
-                  }}
-                >
-                  {loading ? 'Signing in...' : 'Sign in'}
-                </button>
-              </form>
-            )}
-          </>
-        )}
-
-        {/* Admin login */}
-        {tab === 'admin' && (
-          <form onSubmit={handleAdminLogin}>
-            <div style={{ marginBottom: 18 }}>
-              <label
-                style={{
-                  display: 'block',
-                  marginBottom: 6,
-                  fontWeight: 600,
-                  fontSize: '0.9rem',
-                }}
-              >
-                Admin password
-              </label>
-              <input
-                type="password"
-                value={adminPassword}
-                onChange={e => setAdminPassword(e.target.value)}
-                required
-                placeholder="Enter admin password"
-                style={{
-                  width: '100%',
-                  padding: '10px 14px',
-                  border: '1px solid var(--color-border)',
-                  borderRadius: 'var(--radius)',
-                  fontSize: '1rem',
-                  fontFamily: 'inherit',
-                  background: 'var(--color-bg)',
-                  color: 'var(--color-text)',
-                  boxSizing: 'border-box',
-                }}
-              />
+                <Sailboat size={32} className="text-primary" />
+              </motion.div>
+              <h1 className="text-2xl font-bold tracking-tight">SplitCrew</h1>
+              <p className="text-sm text-muted-foreground mt-1">Sailing crew management</p>
             </div>
-            <button
-              type="submit"
-              disabled={loading}
-              style={{
-                display: 'block',
-                width: '100%',
-                padding: 12,
-                background: 'var(--color-brand)',
-                color: 'var(--color-brand-text)',
-                border: 'none',
-                borderRadius: 'var(--radius)',
-                fontSize: '1rem',
-                fontWeight: 600,
-                cursor: 'pointer',
-                fontFamily: 'inherit',
-                opacity: loading ? 0.7 : 1,
-              }}
-            >
-              {loading ? 'Signing in...' : 'Sign in as admin'}
-            </button>
-          </form>
-        )}
-      </div>
+
+            {/* Error */}
+            <AnimatePresence>
+              {error && (
+                <motion.div
+                  className="bg-destructive/10 border border-destructive/20 text-destructive text-sm px-4 py-3 rounded-lg mb-5 text-center"
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                >
+                  {error}
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Tab switcher */}
+            <div className="flex rounded-lg border border-border overflow-hidden mb-6">
+              {(['member', 'admin'] as const).map(t => (
+                <button
+                  key={t}
+                  onClick={() => setTab(t)}
+                  className={cn(
+                    'flex-1 py-2.5 text-center text-sm font-semibold transition-all duration-200 border-none cursor-pointer',
+                    tab === t
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-card text-muted-foreground hover:bg-accent',
+                  )}
+                >
+                  {t === 'member' ? 'Crew' : 'Admin'}
+                </button>
+              ))}
+            </div>
+
+            {/* Member login */}
+            <AnimatePresence mode="wait">
+              {tab === 'member' && (
+                <motion.div
+                  key="member"
+                  initial={{ opacity: 0, x: -12 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 12 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  {users.length === 0 ? (
+                    <div className="text-center text-sm text-muted-foreground py-6">
+                      No crew members have been added yet.
+                      <br />
+                      Log in as admin and add users.
+                    </div>
+                  ) : (
+                    <form onSubmit={handleMemberLogin} className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="user-select">Select your name</Label>
+                        <Select value={userId} onValueChange={setUserId} required>
+                          <SelectTrigger id="user-select">
+                            <SelectValue placeholder="– select –" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {users.map(u => (
+                              <SelectItem key={u.id} value={String(u.id)}>
+                                {u.name} ({u.boat_name || 'no boat'})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="member-password">Password</Label>
+                        <Input
+                          id="member-password"
+                          type="password"
+                          value={memberPassword}
+                          onChange={e => setMemberPassword(e.target.value)}
+                          required
+                          placeholder="Enter your password"
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Checkbox
+                          id="remember"
+                          checked={rememberMe}
+                          onCheckedChange={v => setRememberMe(v === true)}
+                        />
+                        <Label htmlFor="remember" className="text-sm text-muted-foreground font-normal cursor-pointer">
+                          Remember me for 7 days
+                        </Label>
+                      </div>
+                      <Button type="submit" className="w-full" size="lg" disabled={loading}>
+                        {loading ? 'Signing in...' : 'Sign in'}
+                      </Button>
+                    </form>
+                  )}
+                </motion.div>
+              )}
+
+              {tab === 'admin' && (
+                <motion.div
+                  key="admin"
+                  initial={{ opacity: 0, x: 12 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -12 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <form onSubmit={handleAdminLogin} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="admin-password">Admin password</Label>
+                      <Input
+                        id="admin-password"
+                        type="password"
+                        value={adminPassword}
+                        onChange={e => setAdminPassword(e.target.value)}
+                        required
+                        placeholder="Enter admin password"
+                      />
+                    </div>
+                    <Button type="submit" className="w-full" size="lg" disabled={loading}>
+                      {loading ? 'Signing in...' : 'Sign in as admin'}
+                    </Button>
+                  </form>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </CardContent>
+        </Card>
+      </motion.div>
     </div>
   );
 }

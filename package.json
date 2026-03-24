@@ -1,14 +1,16 @@
 {
-  "name": "crewsplit",
+  "name": "splitcrew",
   "version": "0.1.0",
   "private": true,
-  "description": "Self-hosted trip management for sailing crews — expenses, shopping, meals, logbook & more",
+  "description": "Self-hosted trip management — expense splitting, shopping, meals, logbook & more for crews and groups",
   "scripts": {
     "dev": "next dev --port 3000",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "db:init": "psql $DATABASE_URL < scripts/schema.sql && psql $DATABASE_URL < scripts/seed.sql"
+    "db:init": "psql $DATABASE_URL < scripts/schema.sql && psql $DATABASE_URL < scripts/seed.sql",
+    "db:reset": "bash scripts/reset-db.sh",
+    "test:currencies": "node scripts/test-currencies.mjs"
   },
   "keywords": [
     "sailing",
@@ -19,18 +21,25 @@
   ],
   "license": "MIT",
   "dependencies": {
+    "@tailwindcss/postcss": "^4.2.2",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^25.5.0",
     "@types/pg": "^8.20.0",
     "@types/react": "^19.2.14",
     "bcryptjs": "^3.0.3",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
     "framer-motion": "^12.38.0",
     "iron-session": "^8.0.4",
     "lucide-react": "^1.0.1",
     "next": "^16.2.1",
     "pg": "^8.20.0",
+    "postcss": "^8.5.8",
+    "radix-ui": "^1.4.3",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
+    "tailwind-merge": "^3.5.0",
+    "tailwindcss": "^4.2.2",
     "typescript": "^6.0.2"
   }
 }

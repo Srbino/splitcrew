@@ -6,23 +6,35 @@ CREATE TABLE IF NOT EXISTS settings (
     setting_value TEXT
 );
 
--- Boats (typically 2)
+-- Boats (dynamic — admin can create as many as needed)
 CREATE TABLE IF NOT EXISTS boats (
     id          SERIAL PRIMARY KEY,
     name        VARCHAR(100) NOT NULL DEFAULT 'Boat',
+    emoji       VARCHAR(10)  NOT NULL DEFAULT '⛵',
+    color       VARCHAR(20)  NOT NULL DEFAULT 'blue',
     description TEXT
 );
 
+-- Migration: add emoji/color columns if upgrading from older schema
+-- ALTER TABLE boats ADD COLUMN IF NOT EXISTS emoji VARCHAR(10) NOT NULL DEFAULT '⛵';
+-- ALTER TABLE boats ADD COLUMN IF NOT EXISTS color VARCHAR(20) NOT NULL DEFAULT 'blue';
+
 -- Users (crew members)
 CREATE TABLE IF NOT EXISTS users (
-    id      SERIAL PRIMARY KEY,
-    name    VARCHAR(100) NOT NULL,
-    phone   VARCHAR(50)  DEFAULT NULL,
-    email   VARCHAR(150) DEFAULT NULL,
-    avatar  VARCHAR(200) DEFAULT NULL,
-    boat_id INT          NOT NULL DEFAULT 1,
+    id            SERIAL PRIMARY KEY,
+    name          VARCHAR(100) NOT NULL,
+    phone         VARCHAR(50)  DEFAULT NULL,
+    email         VARCHAR(150) DEFAULT NULL,
+    avatar        VARCHAR(200) DEFAULT NULL,
+    password_hash VARCHAR(200) DEFAULT NULL,
+    role          VARCHAR(20)  NOT NULL DEFAULT 'crew',
+    boat_id       INT          NOT NULL DEFAULT 1,
     CONSTRAINT fk_users_boat FOREIGN KEY (boat_id) REFERENCES boats(id)
 );
+
+-- Migration: add columns if upgrading from older schema
+-- ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash VARCHAR(200) DEFAULT NULL;
+-- ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20) NOT NULL DEFAULT 'crew';
 
 -- Wallet expenses
 CREATE TABLE IF NOT EXISTS wallet_expenses (
@@ -83,6 +95,21 @@ CREATE TABLE IF NOT EXISTS wallet_settled (
     CONSTRAINT fk_settled_to FOREIGN KEY (to_user_id) REFERENCES users(id) ON DELETE CASCADE,
     CONSTRAINT fk_settled_by FOREIGN KEY (settled_by) REFERENCES users(id) ON DELETE SET NULL
 );
+
+-- Settlement audit log (tracks who settled/unsettled and when)
+CREATE TABLE IF NOT EXISTS settlement_audit_log (
+    id             SERIAL PRIMARY KEY,
+    from_user_id   INT          NOT NULL,
+    to_user_id     INT          NOT NULL,
+    action         VARCHAR(20)  NOT NULL,
+    performed_by   INT          DEFAULT NULL,
+    performer_role VARCHAR(20)  DEFAULT NULL,
+    created_at     TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_sa_from FOREIGN KEY (from_user_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_sa_to FOREIGN KEY (to_user_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_sa_performer FOREIGN KEY (performed_by) REFERENCES users(id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS idx_settlement_audit_time ON settlement_audit_log(created_at DESC);
 
 -- Shopping list
 CREATE TABLE IF NOT EXISTS shopping_items (
@@ -178,11 +205,33 @@ CREATE TABLE IF NOT EXISTS itinerary (
     sort_order    INT          NOT NULL DEFAULT 0
 );
 
--- Checklist (packing list)
+-- Daily exchange rates (historical archive)
+CREATE TABLE IF NOT EXISTS exchange_rates_daily (
+    id            SERIAL PRIMARY KEY,
+    rate_date     DATE         NOT NULL,
+    base_currency VARCHAR(3)   NOT NULL DEFAULT 'EUR',
+    rates         TEXT         NOT NULL,   -- JSON: { "CZK": 25.21, "USD": 1.08, ... }
+    fetched_at    TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (rate_date, base_currency)
+);
+CREATE INDEX IF NOT EXISTS idx_exchange_rates_date ON exchange_rates_daily(rate_date, base_currency);
+
+-- Checklist (packing list — scoped: personal, boat, or trip-wide)
 CREATE TABLE IF NOT EXISTS checklist (
     id          SERIAL PRIMARY KEY,
     category    VARCHAR(50)  NOT NULL DEFAULT 'recommended',
     item_name   VARCHAR(200) NOT NULL,
     description TEXT         DEFAULT NULL,
-    sort_order  INT          NOT NULL DEFAULT 0
+    scope       VARCHAR(20)  NOT NULL DEFAULT 'trip',
+    user_id     INT          DEFAULT NULL,
+    boat_id     INT          DEFAULT NULL,
+    sort_order  INT          NOT NULL DEFAULT 0,
+    CONSTRAINT fk_checklist_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_checklist_boat FOREIGN KEY (boat_id) REFERENCES boats(id) ON DELETE CASCADE
 );
+CREATE INDEX IF NOT EXISTS idx_checklist_scope ON checklist(scope);
+
+-- Migration: add scope columns if upgrading
+-- ALTER TABLE checklist ADD COLUMN IF NOT EXISTS scope VARCHAR(20) NOT NULL DEFAULT 'trip';
+-- ALTER TABLE checklist ADD COLUMN IF NOT EXISTS user_id INT DEFAULT NULL;
+-- ALTER TABLE checklist ADD COLUMN IF NOT EXISTS boat_id INT DEFAULT NULL;

@@ -1,5 +1,6 @@
 import { getSession } from '@/lib/auth';
 import { getSetting, getUserById } from '@/lib/db';
+import { queryOne } from '@/lib/db';
 import { apiSuccess, apiError } from '@/lib/utils';
 import { compare } from '@/lib/bcrypt';
 
@@ -40,7 +41,6 @@ export async function POST(request: Request) {
         return apiError('Incorrect admin password.');
       }
 
-      // Success — generate CSRF token here (Route Handler can modify cookies)
       session.loginAttempts = undefined;
       session.loginLastAttempt = undefined;
       session.isAdmin = true;
@@ -56,25 +56,37 @@ export async function POST(request: Request) {
         return apiError('Select your name.');
       }
 
-      const memberHash = await getSetting('member_password', '');
-      if (!memberHash || !(await compare(password, memberHash))) {
+      // Get user with password hash
+      const user = await queryOne<{
+        id: number; name: string; boat_id: number; password_hash: string | null; role: string;
+      }>(
+        'SELECT id, name, boat_id, password_hash, COALESCE(role, \'crew\') as role FROM users WHERE id = $1',
+        [user_id]
+      );
+
+      if (!user) {
+        return apiError('User not found.');
+      }
+
+      // Check per-user password
+      if (!user.password_hash) {
+        // User has no password set — admin needs to set one
+        return apiError('No password set for this account. Contact admin.');
+      }
+
+      if (!(await compare(password, user.password_hash))) {
         session.loginAttempts = (session.loginAttempts ?? 0) + 1;
         session.loginLastAttempt = now;
         await session.save();
         return apiError('Incorrect password.');
       }
 
-      const user = await getUserById(user_id);
-      if (!user) {
-        return apiError('User not found.');
-      }
-
-      // Success — generate CSRF token here
       session.loginAttempts = undefined;
       session.loginLastAttempt = undefined;
       session.userId = user.id;
       session.userName = user.name;
       session.boatId = user.boat_id;
+      session.role = (user.role === 'captain' ? 'captain' : 'crew') as 'crew' | 'captain';
       session.isAdmin = false;
       session.lastActivity = now;
       session.csrfToken = newCsrfToken();

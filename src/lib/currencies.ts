@@ -42,6 +42,24 @@ export const CURRENCIES: Record<string, CurrencyInfo> = {
 /** All currency codes sorted alphabetically */
 export const CURRENCY_CODES = Object.keys(CURRENCIES).sort();
 
+/**
+ * Parse allowed currencies from settings JSON string.
+ * Returns array of currency codes, ensuring base_currency is always included.
+ */
+export function parseAllowedCurrencies(json: string, baseCurrency: string): string[] {
+  try {
+    const parsed = JSON.parse(json);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      const codes = parsed.filter((c: unknown) => typeof c === 'string' && CURRENCIES[c as string]);
+      if (!codes.includes(baseCurrency)) codes.unshift(baseCurrency);
+      return codes;
+    }
+  } catch {
+    // invalid JSON
+  }
+  return [baseCurrency];
+}
+
 /** Get currency info, fallback to generic */
 export function getCurrency(code: string): CurrencyInfo {
   return CURRENCIES[code] ?? {

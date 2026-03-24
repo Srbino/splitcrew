@@ -55,6 +55,7 @@ export interface User {
   phone: string | null;
   email: string | null;
   avatar: string | null;
+  role: string;
   boat_id: number;
 }
 

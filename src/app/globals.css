@@ -1,0 +1,267 @@
+@import "tailwindcss";
+
+/* ============================================================
+   SplitCrew Design System — Tailwind v4 + shadcn/ui
+   Ocean-inspired, Apple-clean, Linear-sleek
+   ============================================================ */
+
+@theme {
+  /* Font */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', system-ui, 'Helvetica Neue', Arial, sans-serif;
+
+  /* Radius */
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
+
+  /* Layout */
+  --spacing-sidebar: 220px;
+  --spacing-topbar: 52px;
+  --spacing-bottomnav: 60px;
+
+  /* Shadows (light mode defaults) */
+  --shadow-sm: 0 1px 3px oklch(0 0 0 / 0.06);
+  --shadow-md: 0 2px 8px oklch(0 0 0 / 0.08);
+  --shadow-lg: 0 4px 20px oklch(0 0 0 / 0.12);
+
+  /* Colors — shadcn convention */
+  --color-background: var(--bg);
+  --color-foreground: var(--fg);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-fg);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-fg);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-fg);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-fg);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-fg);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-fg);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-fg);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* Semantic colors */
+  --color-success: var(--success);
+  --color-success-foreground: oklch(1.0 0 0);
+  --color-success-subtle: var(--success-subtle);
+  --color-warning: var(--warning);
+  --color-warning-foreground: oklch(0.15 0 0);
+  --color-warning-subtle: var(--warning-subtle);
+  --color-info: var(--info);
+  --color-info-foreground: oklch(1.0 0 0);
+  --color-info-subtle: var(--info-subtle);
+  --color-danger-subtle: var(--danger-subtle);
+
+  /* Boat colors */
+  --color-boat1: var(--boat1);
+  --color-boat1-subtle: var(--boat1-subtle);
+  --color-boat2: var(--boat2);
+  --color-boat2-subtle: var(--boat2-subtle);
+
+  /* Chart colors */
+  --color-chart-1: oklch(0.55 0.22 255);
+  --color-chart-2: oklch(0.62 0.17 150);
+  --color-chart-3: oklch(0.72 0.16 60);
+  --color-chart-4: oklch(0.60 0.12 195);
+  --color-chart-5: oklch(0.57 0.22 29);
+
+  /* Animation */
+  --animate-in: fadeIn 0.2s ease-out;
+  --animate-slide-in: slideIn 0.25s ease-out;
+}
+
+/* ── Light Mode (default) ── */
+:root {
+  --bg: oklch(1.0 0 0);
+  --fg: oklch(0.09 0.005 265);
+  --card: oklch(1.0 0 0);
+  --card-fg: oklch(0.09 0.005 265);
+  --popover: oklch(1.0 0 0);
+  --popover-fg: oklch(0.09 0.005 265);
+  --primary: oklch(0.55 0.22 255);
+  --primary-fg: oklch(1.0 0 0);
+  --secondary: oklch(0.96 0.005 265);
+  --secondary-fg: oklch(0.09 0.005 265);
+  --muted: oklch(0.96 0.005 265);
+  --muted-fg: oklch(0.44 0.005 265);
+  --accent: oklch(0.96 0.005 265);
+  --accent-fg: oklch(0.09 0.005 265);
+  --destructive: oklch(0.57 0.22 29);
+  --destructive-fg: oklch(1.0 0 0);
+  --border: oklch(0.91 0 0);
+  --input: oklch(0.91 0 0);
+  --ring: oklch(0.55 0.22 255);
+
+  /* Semantic */
+  --success: oklch(0.62 0.17 150);
+  --success-subtle: oklch(0.96 0.025 150);
+  --warning: oklch(0.72 0.16 60);
+  --warning-subtle: oklch(0.96 0.025 60);
+  --info: oklch(0.60 0.13 240);
+  --info-subtle: oklch(0.96 0.015 240);
+  --danger-subtle: oklch(0.96 0.025 29);
+
+  /* Boats */
+  --boat1: oklch(0.53 0.16 255);
+  --boat1-subtle: oklch(0.96 0.018 255);
+  --boat2: oklch(0.60 0.12 195);
+  --boat2-subtle: oklch(0.96 0.018 195);
+
+  /* Sidebar */
+  --sidebar-bg: oklch(0.98 0 0);
+  --sidebar-fg: oklch(0.09 0.005 265);
+  --sidebar-border: oklch(0.91 0 0);
+  --sidebar-active: oklch(0.96 0.015 255);
+  --sidebar-active-fg: oklch(0.55 0.22 255);
+}
+
+/* ── Dark Mode ── */
+.dark {
+  --bg: oklch(0.0 0 0);
+  --fg: oklch(0.98 0 0);
+  --card: oklch(0.12 0 0);
+  --card-fg: oklch(0.98 0 0);
+  --popover: oklch(0.12 0 0);
+  --popover-fg: oklch(0.98 0 0);
+  --primary: oklch(0.62 0.22 255);
+  --primary-fg: oklch(1.0 0 0);
+  --secondary: oklch(0.21 0.005 265);
+  --secondary-fg: oklch(0.98 0 0);
+  --muted: oklch(0.21 0.005 265);
+  --muted-fg: oklch(0.63 0.005 265);
+  --accent: oklch(0.21 0.005 265);
+  --accent-fg: oklch(0.98 0 0);
+  --destructive: oklch(0.64 0.22 29);
+  --destructive-fg: oklch(1.0 0 0);
+  --border: oklch(0.28 0 0);
+  --input: oklch(0.21 0 0);
+  --ring: oklch(0.62 0.22 255);
+
+  /* Semantic */
+  --success: oklch(0.68 0.17 150);
+  --success-subtle: oklch(0.20 0.03 150);
+  --warning: oklch(0.76 0.16 60);
+  --warning-subtle: oklch(0.20 0.03 60);
+  --info: oklch(0.65 0.13 240);
+  --info-subtle: oklch(0.20 0.025 240);
+  --danger-subtle: oklch(0.20 0.03 29);
+
+  /* Boats */
+  --boat1: oklch(0.60 0.16 255);
+  --boat1-subtle: oklch(0.20 0.025 255);
+  --boat2: oklch(0.65 0.12 195);
+  --boat2-subtle: oklch(0.20 0.025 195);
+
+  /* Sidebar */
+  --sidebar-bg: oklch(0.08 0 0);
+  --sidebar-fg: oklch(0.98 0 0);
+  --sidebar-border: oklch(0.21 0 0);
+  --sidebar-active: oklch(0.18 0.02 255);
+  --sidebar-active-fg: oklch(0.70 0.22 255);
+}
+
+/* ============================================================
+   BASE STYLES
+   ============================================================ */
+
+* {
+  border-color: var(--border);
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--color-background);
+  color: var(--color-foreground);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ============================================================
+   SCROLLBAR
+   ============================================================ */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: oklch(0.7 0 0);
+  border-radius: 3px;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: oklch(0.3 0 0);
+}
+
+/* ============================================================
+   SAFE AREA (iPhone notch / home indicator)
+   ============================================================ */
+
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+@utility pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+/* ============================================================
+   ANIMATIONS (keyframes for Tailwind animate-* classes)
+   ============================================================ */
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(12px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* ============================================================
+   AVATAR COLOR VARIANTS
+   ============================================================ */
+
+.avatar-primary { background: oklch(0.55 0.22 255); color: white; }
+.avatar-success { background: oklch(0.62 0.17 150); color: white; }
+.avatar-danger { background: oklch(0.57 0.22 29); color: white; }
+.avatar-warning { background: oklch(0.72 0.16 60); color: oklch(0.15 0 0); }
+.avatar-info { background: oklch(0.60 0.13 240); color: white; }
+.avatar-boat1 { background: oklch(0.53 0.16 255); color: white; }
+.avatar-boat2 { background: oklch(0.60 0.12 195); color: white; }
+.avatar-secondary { background: oklch(0.50 0.08 300); color: white; }
+
+/* ============================================================
+   FOCUS RING (consistent across all interactive elements)
+   ============================================================ */
+
+@layer base {
+  *:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+  }
+}

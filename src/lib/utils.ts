@@ -1,3 +1,11 @@
+import { type ClassValue, clsx } from 'clsx';
+import { twMerge } from 'tailwind-merge';
+
+/** Merge Tailwind classes with conflict resolution */
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
+
 /** Format money amount with 2 decimal places */
 export function formatMoney(amount: number, currency = 'EUR'): string {
   return new Intl.NumberFormat('en-US', {

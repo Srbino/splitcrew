@@ -1,13 +1,26 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus, Pencil, Trash2, Check, X, ArrowRight,
   Receipt, BarChart3, Handshake, RefreshCw, ChevronDown,
 } from 'lucide-react';
-import { Modal } from '@/components/Modal';
-import { Avatar } from '@/components/Avatar';
-import { useToast } from '@/components/Toast';
+import { Modal } from '@/components/shared/modal';
+import { useToast } from '@/components/shared/toast';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { cn, getInitials, avatarColorClass } from '@/lib/utils';
 import { useI18n } from '@/lib/i18n/context';
 import { CURRENCIES, CURRENCY_CODES, formatCurrency, getCurrency } from '@/lib/currencies';
 import { formatDate, formatDateTime } from '@/lib/utils';
@@ -78,6 +91,14 @@ interface AuditEntry {
 
 // ── Helpers ──
 
+function getAllowedCurrencies(): string[] {
+  if (typeof document === 'undefined') return [];
+  try {
+    const meta = document.querySelector('meta[name="allowed-currencies"]');
+    return meta ? JSON.parse(meta.getAttribute('content') || '[]') : [];
+  } catch { return []; }
+}
+
 function getCsrfToken(): string {
   if (typeof document === 'undefined') return '';
   const meta = document.querySelector('meta[name="csrf-token"]');
@@ -99,10 +120,48 @@ async function apiCall<T = unknown>(
   return res.json();
 }
 
+// ── Inline Avatar Helper ──
+
+function UserAvatar({
+  name,
+  avatar,
+  userId,
+  size = 'sm',
+}: {
+  name: string;
+  avatar: string | null;
+  userId: number;
+  size?: 'default' | 'sm' | 'lg';
+}) {
+  return (
+    <Avatar size={size} className={avatarColorClass(userId)}>
+      {avatar ? (
+        <AvatarImage src={avatar} alt={name} />
+      ) : null}
+      <AvatarFallback>{getInitials(name)}</AvatarFallback>
+    </Avatar>
+  );
+}
+
+// ── Animation Variants ──
+
+const listVariants = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1, transition: { staggerChildren: 0.04 } },
+};
+const cardVariants = {
+  hidden: { opacity: 0, y: 8 },
+  visible: { opacity: 1, y: 0, transition: { type: 'spring' as const, damping: 20, stiffness: 300 } },
+};
+
 // ── Main Page Component ──
 
 type TabId = 'expenses' | 'balances' | 'settlements';
-type FilterId = 'all' | 'mine' | 'boat1' | 'boat2';
+
+interface BoatInfo {
+  id: number;
+  name: string;
+}
 
 export default function WalletPage() {
   const { t } = useI18n();
@@ -111,11 +170,14 @@ export default function WalletPage() {
   // Tab state
   const [activeTab, setActiveTab] = useState<TabId>('expenses');
 
+  // Boats (loaded dynamically)
+  const [boats, setBoats] = useState<BoatInfo[]>([]);
+
   // Expenses state
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [totalEur, setTotalEur] = useState(0);
   const [baseCurrency, setBaseCurrency] = useState('EUR');
-  const [filter, setFilter] = useState<FilterId>('all');
+  const [filter, setFilter] = useState('all');
   const [loadingExpenses, setLoadingExpenses] = useState(true);
 
   // Balances state
@@ -173,9 +235,21 @@ export default function WalletPage() {
   const loadUsers = async () => {
     const res = await apiCall<UserInfo[]>('/api/auth/users');
     if (res.success && res.data) {
-      // The users endpoint returns the array directly in data
       const userList = Array.isArray(res.data) ? res.data : [];
       setUsers(userList);
+      // Extract unique boats from user data
+      const boatMap = new Map<number, string>();
+      for (const u of userList) {
+        if (u.boat_id && u.boat_name && !boatMap.has(u.boat_id)) {
+          boatMap.set(u.boat_id, u.boat_name);
+        }
+      }
+      const boatList: BoatInfo[] = [];
+      for (const [id, name] of boatMap) {
+        boatList.push({ id, name });
+      }
+      boatList.sort((a, b) => a.id - b.id);
+      setBoats(boatList);
     }
   };
 
@@ -249,7 +323,6 @@ export default function WalletPage() {
 
   const openAddModal = useCallback(() => {
     resetForm();
-    // Auto-select all users for split
     setFormSplitUsers(users.map(u => u.id));
     setShowExpenseModal(true);
   }, [resetForm, users]);
@@ -262,7 +335,6 @@ export default function WalletPage() {
       setFormCurrency(expense.currency);
       setFormDescription(expense.description);
       setFormCategory(expense.category);
-      // Format date for datetime-local input
       const d = new Date(expense.expense_date);
       const dateStr = d.getFullYear() +
         '-' + String(d.getMonth() + 1).padStart(2, '0') +
@@ -380,17 +452,17 @@ export default function WalletPage() {
   // ── Split user helpers ──
 
   const usersForSplitType = useMemo(() => {
-    if (formSplitType === 'boat1') return users.filter(u => u.boat_id === 1);
-    if (formSplitType === 'boat2') return users.filter(u => u.boat_id === 2);
+    if (formSplitType === 'both') return users;
+    // Dynamic boat filter: formSplitType is boat ID as string (e.g., "1", "2", "3")
+    const boatId = parseInt(formSplitType);
+    if (boatId > 0) return users.filter(u => u.boat_id === boatId);
     return users;
   }, [users, formSplitType]);
 
-  // Auto-update split users when split type changes
   useEffect(() => {
     const validIds = new Set(usersForSplitType.map(u => u.id));
     setFormSplitUsers(prev => {
       const filtered = prev.filter(id => validIds.has(id));
-      // If none selected after filtering, select all from this group
       if (filtered.length === 0) {
         return usersForSplitType.map(u => u.id);
       }
@@ -443,11 +515,11 @@ export default function WalletPage() {
   return (
     <div>
       {/* Page header */}
-      <div className="page-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+      <div className="flex items-center justify-between flex-wrap gap-3 mb-6">
         <div>
-          <h1 className="page-title">{t('wallet.title')}</h1>
+          <h1 className="text-2xl font-bold tracking-tight">{t('wallet.title')}</h1>
           {totalEur > 0 && activeTab === 'expenses' && (
-            <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.85rem', margin: '4px 0 0' }}>
+            <p className="text-sm text-muted-foreground mt-1">
               {t('wallet.totalSpent')}: {formatCurrency(totalEur, baseCurrency)}
             </p>
           )}
@@ -455,42 +527,37 @@ export default function WalletPage() {
       </div>
 
       {/* Tab navigation */}
-      <div className="tab-nav" role="tablist">
-        <button
-          className={`tab-btn ${activeTab === 'expenses' ? 'active' : ''}`}
-          onClick={() => setActiveTab('expenses')}
-          role="tab"
-          aria-selected={activeTab === 'expenses'}
-        >
-          <Receipt size={16} />
-          <span>{t('wallet.expenses')}</span>
-        </button>
-        <button
-          className={`tab-btn ${activeTab === 'balances' ? 'active' : ''}`}
-          onClick={() => setActiveTab('balances')}
-          role="tab"
-          aria-selected={activeTab === 'balances'}
-        >
-          <BarChart3 size={16} />
-          <span>{t('wallet.balances')}</span>
-        </button>
-        <button
-          className={`tab-btn ${activeTab === 'settlements' ? 'active' : ''}`}
-          onClick={() => setActiveTab('settlements')}
-          role="tab"
-          aria-selected={activeTab === 'settlements'}
-        >
-          <Handshake size={16} />
-          <span>{t('wallet.settlements')}</span>
-        </button>
+      <div className="flex gap-1 mb-5 rounded-lg border border-border p-1 bg-muted/50" role="tablist">
+        {([
+          { id: 'expenses' as TabId, icon: Receipt, label: t('wallet.expenses') },
+          { id: 'balances' as TabId, icon: BarChart3, label: t('wallet.balances') },
+          { id: 'settlements' as TabId, icon: Handshake, label: t('wallet.settlements') },
+        ] as const).map(tab => (
+          <button
+            key={tab.id}
+            className={cn(
+              'flex-1 flex items-center justify-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium transition-all cursor-pointer border-none',
+              activeTab === tab.id
+                ? 'bg-background shadow-sm text-foreground'
+                : 'text-muted-foreground hover:text-foreground bg-transparent'
+            )}
+            onClick={() => setActiveTab(tab.id)}
+            role="tab"
+            aria-selected={activeTab === tab.id}
+          >
+            <tab.icon size={16} />
+            <span>{tab.label}</span>
+          </button>
+        ))}
       </div>
 
       {/* Tab content */}
-      <div className="tab-content">
+      <div>
         {activeTab === 'expenses' && (
           <ExpensesTab
             expenses={expenses}
             baseCurrency={baseCurrency}
+            boats={boats}
             filter={filter}
             setFilter={setFilter}
             loading={loadingExpenses}
@@ -527,14 +594,17 @@ export default function WalletPage() {
 
       {/* FAB: Add expense */}
       {activeTab === 'expenses' && (
-        <button
-          className="fab"
+        <motion.button
+          className="fixed bottom-24 right-5 md:bottom-8 z-40 w-12 h-12 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center border-none cursor-pointer"
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.95 }}
+          transition={{ type: 'spring', damping: 15, stiffness: 400 }}
           onClick={openAddModal}
           aria-label={t('wallet.addExpense')}
           title={t('wallet.addExpense')}
         >
           <Plus size={24} />
-        </button>
+        </motion.button>
       )}
 
       {/* Add/Edit Expense Modal */}
@@ -547,23 +617,22 @@ export default function WalletPage() {
         title={editingExpense ? t('wallet.editExpense') : t('wallet.addExpense')}
         size="lg"
         footer={
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', width: '100%' }}>
-            <button
-              className="btn btn-outline"
+          <div className="flex gap-2 justify-end w-full">
+            <Button
+              variant="outline"
               onClick={() => {
                 setShowExpenseModal(false);
                 resetForm();
               }}
             >
               {t('common.cancel')}
-            </button>
-            <button
-              className="btn btn-primary"
+            </Button>
+            <Button
               onClick={handleSubmitExpense}
               disabled={formSubmitting}
             >
               {formSubmitting ? t('common.loading') : t('common.save')}
-            </button>
+            </Button>
           </div>
         }
       >
@@ -588,6 +657,7 @@ export default function WalletPage() {
           selectAllSplitUsers={selectAllSplitUsers}
           deselectAllSplitUsers={deselectAllSplitUsers}
           usersForSplitType={usersForSplitType}
+          boats={boats}
           conversionHint={conversionHint}
           baseCurrency={baseCurrency}
           categories={categories}
@@ -605,19 +675,19 @@ export default function WalletPage() {
         title={t('common.confirm')}
         size="sm"
         footer={
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', width: '100%' }}>
-            <button
-              className="btn btn-outline"
+          <div className="flex gap-2 justify-end w-full">
+            <Button
+              variant="outline"
               onClick={() => {
                 setShowDeleteConfirm(false);
                 setDeletingExpenseId(null);
               }}
             >
               {t('common.cancel')}
-            </button>
-            <button className="btn btn-danger" onClick={handleDeleteExpense}>
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteExpense}>
               {t('common.delete')}
-            </button>
+            </Button>
           </div>
         }
       >
@@ -646,6 +716,7 @@ export default function WalletPage() {
 function ExpensesTab({
   expenses,
   baseCurrency,
+  boats,
   filter,
   setFilter,
   loading,
@@ -656,29 +727,35 @@ function ExpensesTab({
 }: {
   expenses: Expense[];
   baseCurrency: string;
-  filter: FilterId;
-  setFilter: (f: FilterId) => void;
+  boats: BoatInfo[];
+  filter: string;
+  setFilter: (f: string) => void;
   loading: boolean;
   onEdit: (e: Expense) => void;
   onDelete: (id: number) => void;
   onAudit: (id: number) => void;
   t: (key: string, params?: Record<string, string | number>) => string;
 }) {
-  const filters: { id: FilterId; label: string }[] = [
+  // Dynamic filters: All, Mine, + one per boat
+  const filters: { id: string; label: string }[] = [
     { id: 'all', label: t('wallet.filterAll') },
     { id: 'mine', label: t('wallet.filterMine') },
-    { id: 'boat1', label: 'Boat 1' },
-    { id: 'boat2', label: 'Boat 2' },
+    ...boats.map(b => ({ id: `boat_${b.id}`, label: b.name })),
   ];
 
   return (
     <div>
       {/* Filter buttons */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
+      <div className="flex gap-2 mb-5 flex-wrap">
         {filters.map(f => (
           <button
             key={f.id}
-            className={`btn btn-sm ${filter === f.id ? 'btn-primary' : 'btn-outline'}`}
+            className={cn(
+              'px-3 py-1.5 rounded-md text-sm font-medium transition-colors cursor-pointer border-none',
+              filter === f.id
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
+            )}
             onClick={() => setFilter(f.id)}
           >
             {f.label}
@@ -687,29 +764,30 @@ function ExpensesTab({
       </div>
 
       {loading ? (
-        <div style={{ textAlign: 'center', padding: 40, color: 'var(--color-text-secondary)' }}>
-          <RefreshCw size={24} className="spin" />
-          <p>{t('common.loading')}</p>
+        <div className="text-center py-10 text-muted-foreground">
+          <RefreshCw size={24} className="animate-spin mx-auto" />
+          <p className="mt-2">{t('common.loading')}</p>
         </div>
       ) : expenses.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: 40, color: 'var(--color-text-secondary)' }}>
-          <Receipt size={48} style={{ opacity: 0.3, marginBottom: 12 }} />
+        <div className="text-center py-10 text-muted-foreground">
+          <Receipt size={48} className="opacity-30 mx-auto mb-3" />
           <p>{t('wallet.noExpenses')}</p>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <motion.div className="flex flex-col gap-3" variants={listVariants} initial="hidden" animate="visible">
           {expenses.map(expense => (
-            <ExpenseCard
-              key={expense.id}
-              expense={expense}
-              baseCurrency={baseCurrency}
-              onEdit={() => onEdit(expense)}
-              onDelete={() => onDelete(expense.id)}
-              onAudit={() => onAudit(expense.id)}
-              t={t}
-            />
+            <motion.div key={expense.id} variants={cardVariants}>
+              <ExpenseCard
+                expense={expense}
+                baseCurrency={baseCurrency}
+                onEdit={() => onEdit(expense)}
+                onDelete={() => onDelete(expense.id)}
+                onAudit={() => onAudit(expense.id)}
+                t={t}
+              />
+            </motion.div>
           ))}
-        </div>
+        </motion.div>
       )}
     </div>
   );
@@ -732,127 +810,91 @@ function ExpenseCard({
   onAudit: () => void;
   t: (key: string) => string;
 }) {
-  const [showActions, setShowActions] = useState(false);
   const isConverted = expense.currency !== baseCurrency;
 
   return (
-    <div className="card expense-card" style={{ cursor: 'pointer' }} onClick={onEdit}>
-      <div className="card-body" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px 20px' }}>
+    <Card className="cursor-pointer hover:bg-accent/50 transition-colors py-0" onClick={onEdit}>
+      <CardContent className="flex items-center gap-3.5 px-4 py-3">
         {/* Avatar */}
-        <Avatar
+        <UserAvatar
           name={expense.paid_by_name}
           avatar={expense.paid_by_avatar}
-          size="sm"
           userId={expense.paid_by}
         />
 
         {/* Info */}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: 600, fontSize: '0.9rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        <div className="flex-1 min-w-0">
+          <div className="font-semibold text-sm truncate">
             {expense.description}
           </div>
-          <div style={{ fontSize: '0.78rem', color: 'var(--color-text-secondary)', marginTop: 2 }}>
+          <div className="text-xs text-muted-foreground mt-0.5">
             {expense.paid_by_name} &middot; {formatDate(expense.expense_date)}
           </div>
         </div>
 
         {/* Amount */}
-        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+        <div className="text-right shrink-0">
           {isConverted ? (
             <>
-              <span className="amount-pill-czk" style={{ display: 'block', fontWeight: 600, fontSize: '0.9rem' }}>
+              <span className="block font-semibold text-sm">
                 {formatCurrency(expense.amount, expense.currency)}
               </span>
-              <span style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)' }}>
+              <span className="text-xs text-muted-foreground">
                 {formatCurrency(expense.amount_eur, baseCurrency)}
               </span>
             </>
           ) : (
-            <span className="amount-pill-eur" style={{ fontWeight: 600, fontSize: '0.9rem' }}>
+            <span className="font-semibold text-sm">
               {formatCurrency(expense.amount_eur, baseCurrency)}
             </span>
           )}
         </div>
 
-        {/* Actions toggle */}
-        <div style={{ position: 'relative' }}>
-          <button
-            className="btn btn-sm btn-outline"
-            style={{ padding: '4px 6px', lineHeight: 1 }}
-            onClick={(e) => {
-              e.stopPropagation();
-              setShowActions(!showActions);
-            }}
-            aria-label={t('common.actions')}
-          >
-            <ChevronDown size={14} />
-          </button>
-          {showActions && (
-            <div
-              style={{
-                position: 'absolute',
-                right: 0,
-                top: '100%',
-                marginTop: 4,
-                background: 'var(--color-bg-card)',
-                border: '1px solid var(--color-border)',
-                borderRadius: 8,
-                boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                zIndex: 10,
-                minWidth: 140,
-                overflow: 'hidden',
+        {/* Actions dropdown */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="outline"
+              size="icon-xs"
+              onClick={(e) => e.stopPropagation()}
+              aria-label={t('common.actions')}
+            >
+              <ChevronDown size={14} />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit();
               }}
             >
-              <button
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 8, width: '100%',
-                  padding: '10px 14px', border: 'none', background: 'none',
-                  cursor: 'pointer', fontSize: '0.85rem', color: 'var(--color-text)',
-                  fontFamily: 'inherit',
-                }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowActions(false);
-                  onEdit();
-                }}
-              >
-                <Pencil size={14} /> {t('common.edit')}
-              </button>
-              <button
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 8, width: '100%',
-                  padding: '10px 14px', border: 'none', background: 'none',
-                  cursor: 'pointer', fontSize: '0.85rem', color: 'var(--color-text)',
-                  fontFamily: 'inherit',
-                }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowActions(false);
-                  onAudit();
-                }}
-              >
-                <Receipt size={14} /> {t('wallet.auditLog')}
-              </button>
-              <button
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 8, width: '100%',
-                  padding: '10px 14px', border: 'none', background: 'none',
-                  cursor: 'pointer', fontSize: '0.85rem', color: 'var(--color-danger)',
-                  fontFamily: 'inherit',
-                }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowActions(false);
-                  onDelete();
-                }}
-              >
-                <Trash2 size={14} /> {t('common.delete')}
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
+              <Pencil size={14} />
+              {t('common.edit')}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.stopPropagation();
+                onAudit();
+              }}
+            >
+              <Receipt size={14} />
+              {t('wallet.auditLog')}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="text-destructive focus:text-destructive"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete();
+              }}
+            >
+              <Trash2 size={14} />
+              {t('common.delete')}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -871,46 +913,32 @@ function BalancesTab({
 }) {
   if (loading) {
     return (
-      <div style={{ textAlign: 'center', padding: 40, color: 'var(--color-text-secondary)' }}>
-        <RefreshCw size={24} className="spin" />
-        <p>{t('common.loading')}</p>
+      <div className="text-center py-10 text-muted-foreground">
+        <RefreshCw size={24} className="animate-spin mx-auto" />
+        <p className="mt-2">{t('common.loading')}</p>
       </div>
     );
   }
 
-  // Filter out users with 0 paid and 0 share
   const activeBalances = balances.filter(b => b.paid !== 0 || b.share !== 0);
 
   if (activeBalances.length === 0) {
     return (
-      <div style={{ textAlign: 'center', padding: 40, color: 'var(--color-text-secondary)' }}>
-        <BarChart3 size={48} style={{ opacity: 0.3, marginBottom: 12 }} />
+      <div className="text-center py-10 text-muted-foreground">
+        <BarChart3 size={48} className="opacity-30 mx-auto mb-3" />
         <p>{t('wallet.noExpenses')}</p>
       </div>
     );
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <motion.div className="flex flex-col gap-3" variants={listVariants} initial="hidden" animate="visible">
       {/* Header row */}
-      <div
-        className="balance-row"
-        style={{
-          display: 'grid',
-          gridTemplateColumns: '1fr 90px 90px 90px',
-          gap: 16,
-          padding: '10px 20px',
-          fontSize: '0.75rem',
-          fontWeight: 600,
-          color: 'var(--color-text-secondary)',
-          textTransform: 'uppercase',
-          letterSpacing: '0.5px',
-        }}
-      >
+      <div className="grid grid-cols-[1fr_90px_90px_90px] gap-4 px-5 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
         <span>Name</span>
-        <span style={{ textAlign: 'right' }}>{t('dashboard.paid')}</span>
-        <span style={{ textAlign: 'right' }}>Share</span>
-        <span style={{ textAlign: 'right' }}>Balance</span>
+        <span className="text-right">{t('dashboard.paid')}</span>
+        <span className="text-right">Share</span>
+        <span className="text-right">Balance</span>
       </div>
 
       {activeBalances.map(b => {
@@ -918,53 +946,41 @@ function BalancesTab({
         const isNegative = b.balance < -0.01;
 
         return (
-          <div
-            key={b.user_id}
-            className="card balance-row"
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 90px 90px 90px',
-              gap: 16,
-              alignItems: 'center',
-              padding: '16px 20px',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-              <Avatar name={b.name} avatar={b.avatar} size="sm" userId={b.user_id} />
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 600, fontSize: '0.88rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {b.name}
+          <motion.div key={b.user_id} variants={cardVariants}>
+            <Card className="py-0">
+              <CardContent className="grid grid-cols-[1fr_90px_90px_90px] gap-4 items-center px-5 py-4">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <UserAvatar name={b.name} avatar={b.avatar} userId={b.user_id} />
+                  <div className="min-w-0">
+                    <div className="font-semibold text-sm truncate">
+                      {b.name}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {b.boat_name}
+                    </div>
+                  </div>
                 </div>
-                <div style={{ fontSize: '0.72rem', color: 'var(--color-text-secondary)' }}>
-                  {b.boat_name}
-                </div>
-              </div>
-            </div>
-            <span style={{ textAlign: 'right', fontSize: '0.85rem', fontVariantNumeric: 'tabular-nums' }}>
-              {formatCurrency(b.paid, baseCurrency)}
-            </span>
-            <span style={{ textAlign: 'right', fontSize: '0.85rem', fontVariantNumeric: 'tabular-nums' }}>
-              {formatCurrency(b.share, baseCurrency)}
-            </span>
-            <span
-              style={{
-                textAlign: 'right',
-                fontWeight: 700,
-                fontSize: '0.88rem',
-                fontVariantNumeric: 'tabular-nums',
-                color: isPositive
-                  ? 'var(--color-success)'
-                  : isNegative
-                  ? 'var(--color-danger)'
-                  : 'var(--color-text)',
-              }}
-            >
-              {b.balance > 0 ? '+' : ''}{formatCurrency(b.balance, baseCurrency)}
-            </span>
-          </div>
+                <span className="text-right text-sm tabular-nums">
+                  {formatCurrency(b.paid, baseCurrency)}
+                </span>
+                <span className="text-right text-sm tabular-nums">
+                  {formatCurrency(b.share, baseCurrency)}
+                </span>
+                <span
+                  className={cn(
+                    'text-right font-bold text-sm tabular-nums',
+                    isPositive && 'text-green-600 dark:text-green-400',
+                    isNegative && 'text-destructive',
+                  )}
+                >
+                  {b.balance > 0 ? '+' : ''}{formatCurrency(b.balance, baseCurrency)}
+                </span>
+              </CardContent>
+            </Card>
+          </motion.div>
         );
       })}
-    </div>
+    </motion.div>
   );
 }
 
@@ -987,98 +1003,95 @@ function SettlementsTab({
 }) {
   if (loading) {
     return (
-      <div style={{ textAlign: 'center', padding: 40, color: 'var(--color-text-secondary)' }}>
-        <RefreshCw size={24} className="spin" />
-        <p>{t('common.loading')}</p>
+      <div className="text-center py-10 text-muted-foreground">
+        <RefreshCw size={24} className="animate-spin mx-auto" />
+        <p className="mt-2">{t('common.loading')}</p>
       </div>
     );
   }
 
   if (settlements.length === 0) {
     return (
-      <div style={{ textAlign: 'center', padding: 40, color: 'var(--color-text-secondary)' }}>
-        <Handshake size={48} style={{ opacity: 0.3, marginBottom: 12 }} />
+      <div className="text-center py-10 text-muted-foreground">
+        <Handshake size={48} className="opacity-30 mx-auto mb-3" />
         <p>All settled up!</p>
       </div>
     );
   }
 
-  // Show conversion for common currencies
-  const showCurrencies = ['CZK', 'USD', 'GBP'].filter(
+  const showCurrencies = getAllowedCurrencies().filter(
     c => c !== baseCurrency && exchangeRates[c]
   );
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {settlements.map((s, idx) => (
-        <div
-          key={`${s.from_user_id}-${s.to_user_id}`}
-          className={`card settlement-item-v2 ${s.is_settled ? 'settled' : ''}`}
-          style={{
-            opacity: s.is_settled ? 0.6 : 1,
-            padding: '18px 20px',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-            {/* From user */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-              <Avatar name={s.from_name} avatar={s.from_avatar} size="sm" userId={s.from_user_id} />
-              <span style={{ fontWeight: 600, fontSize: '0.88rem', whiteSpace: 'nowrap' }}>
-                {s.from_name}
-              </span>
-            </div>
-
-            <ArrowRight size={16} style={{ color: 'var(--color-text-secondary)', flexShrink: 0 }} />
-
-            {/* To user */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-              <Avatar name={s.to_name} avatar={s.to_avatar} size="sm" userId={s.to_user_id} />
-              <span style={{ fontWeight: 600, fontSize: '0.88rem', whiteSpace: 'nowrap' }}>
-                {s.to_name}
-              </span>
-            </div>
-
-            {/* Amount */}
-            <div style={{ marginLeft: 'auto', textAlign: 'right', flexShrink: 0 }}>
-              <div style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--color-danger)' }}>
-                {formatCurrency(s.amount, baseCurrency)}
+    <motion.div className="flex flex-col gap-3" variants={listVariants} initial="hidden" animate="visible">
+      {settlements.map((s) => (
+        <motion.div key={`${s.from_user_id}-${s.to_user_id}`} variants={cardVariants}>
+          <Card
+            className={cn('py-0', s.is_settled && 'opacity-60')}
+          >
+            <CardContent className="flex items-center gap-3.5 flex-wrap px-5 py-4">
+              {/* From user */}
+              <div className="flex items-center gap-2 min-w-0">
+                <UserAvatar name={s.from_name} avatar={s.from_avatar} userId={s.from_user_id} />
+                <span className="font-semibold text-sm whitespace-nowrap">
+                  {s.from_name}
+                </span>
               </div>
-              {showCurrencies.length > 0 && (
-                <div style={{ fontSize: '0.72rem', color: 'var(--color-text-secondary)' }}>
-                  {showCurrencies.map(c => {
-                    const converted = Math.round(s.amount * exchangeRates[c] * 100) / 100;
-                    return (
-                      <span key={c} style={{ marginRight: 8 }}>
-                        ~{formatCurrency(converted, c)}
-                      </span>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
 
-            {/* Settle button */}
-            <button
-              className={`btn btn-sm ${s.is_settled ? 'btn-outline' : 'btn-primary'}`}
-              onClick={() => onToggleSettle(s)}
-              style={{ flexShrink: 0, minWidth: 44 }}
-            >
-              {s.is_settled ? (
-                <>
-                  <X size={14} />
-                  <span style={{ marginLeft: 4 }}>{t('wallet.unmarkSettled')}</span>
-                </>
-              ) : (
-                <>
-                  <Check size={14} />
-                  <span style={{ marginLeft: 4 }}>{t('wallet.markSettled')}</span>
-                </>
-              )}
-            </button>
-          </div>
-        </div>
+              <ArrowRight size={16} className="text-muted-foreground shrink-0" />
+
+              {/* To user */}
+              <div className="flex items-center gap-2 min-w-0">
+                <UserAvatar name={s.to_name} avatar={s.to_avatar} userId={s.to_user_id} />
+                <span className="font-semibold text-sm whitespace-nowrap">
+                  {s.to_name}
+                </span>
+              </div>
+
+              {/* Amount */}
+              <div className="ml-auto text-right shrink-0">
+                <div className="font-bold text-base text-destructive">
+                  {formatCurrency(s.amount, baseCurrency)}
+                </div>
+                {showCurrencies.length > 0 && (
+                  <div className="text-xs text-muted-foreground">
+                    {showCurrencies.map(c => {
+                      const converted = Math.round(s.amount * exchangeRates[c] * 100) / 100;
+                      return (
+                        <span key={c} className="mr-2">
+                          ~{formatCurrency(converted, c)}
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Settle button */}
+              <Button
+                variant={s.is_settled ? 'outline' : 'default'}
+                size="sm"
+                className="shrink-0"
+                onClick={() => onToggleSettle(s)}
+              >
+                {s.is_settled ? (
+                  <>
+                    <X size={14} />
+                    <span>{t('wallet.unmarkSettled')}</span>
+                  </>
+                ) : (
+                  <>
+                    <Check size={14} />
+                    <span>{t('wallet.markSettled')}</span>
+                  </>
+                )}
+              </Button>
+            </CardContent>
+          </Card>
+        </motion.div>
       ))}
-    </div>
+    </motion.div>
   );
 }
 
@@ -1105,6 +1118,7 @@ function ExpenseForm({
   selectAllSplitUsers,
   deselectAllSplitUsers,
   usersForSplitType,
+  boats,
   conversionHint,
   baseCurrency,
   categories,
@@ -1130,18 +1144,19 @@ function ExpenseForm({
   selectAllSplitUsers: () => void;
   deselectAllSplitUsers: () => void;
   usersForSplitType: UserInfo[];
+  boats: BoatInfo[];
   conversionHint: string | null;
   baseCurrency: string;
   categories: { value: string; label: string }[];
   t: (key: string) => string;
 }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div className="flex flex-col gap-4">
       {/* Paid by */}
-      <div className="form-group">
-        <label className="form-label">{t('wallet.paidBy')}</label>
+      <div className="space-y-2 mb-0">
+        <Label>{t('wallet.paidBy')}</Label>
         <select
-          className="form-control"
+          className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
           value={formPaidBy}
           onChange={e => setFormPaidBy(parseInt(e.target.value))}
         >
@@ -1155,12 +1170,11 @@ function ExpenseForm({
       </div>
 
       {/* Amount + Currency */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px', gap: 12 }}>
-        <div className="form-group">
-          <label className="form-label">{t('wallet.amount')}</label>
-          <input
+      <div className="grid grid-cols-[1fr_120px] gap-3">
+        <div className="space-y-2">
+          <Label>{t('wallet.amount')}</Label>
+          <Input
             type="number"
-            className="form-control"
             value={formAmount}
             onChange={e => setFormAmount(e.target.value)}
             placeholder="0.00"
@@ -1169,14 +1183,14 @@ function ExpenseForm({
             inputMode="decimal"
           />
         </div>
-        <div className="form-group">
-          <label className="form-label">{t('wallet.currency')}</label>
+        <div className="space-y-2">
+          <Label>{t('wallet.currency')}</Label>
           <select
-            className="form-control"
+            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             value={formCurrency}
             onChange={e => setFormCurrency(e.target.value)}
           >
-            {CURRENCY_CODES.map(code => {
+            {(getAllowedCurrencies().length > 0 ? getAllowedCurrencies() : CURRENCY_CODES).map(code => {
               const info = getCurrency(code);
               return (
                 <option key={code} value={code}>
@@ -1190,26 +1204,16 @@ function ExpenseForm({
 
       {/* Conversion hint */}
       {conversionHint && (
-        <div
-          style={{
-            padding: '8px 12px',
-            background: 'var(--color-bg-secondary)',
-            borderRadius: 8,
-            fontSize: '0.8rem',
-            color: 'var(--color-text-secondary)',
-            marginTop: -8,
-          }}
-        >
+        <div className="px-3 py-2 bg-muted rounded-lg text-xs text-muted-foreground -mt-2">
           {conversionHint}
         </div>
       )}
 
       {/* Description */}
-      <div className="form-group">
-        <label className="form-label">{t('wallet.description')}</label>
-        <input
+      <div className="space-y-2">
+        <Label>{t('wallet.description')}</Label>
+        <Input
           type="text"
-          className="form-control"
           value={formDescription}
           onChange={e => setFormDescription(e.target.value)}
           placeholder={t('wallet.description')}
@@ -1218,11 +1222,11 @@ function ExpenseForm({
       </div>
 
       {/* Category + Date */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-        <div className="form-group">
-          <label className="form-label">{t('wallet.category')}</label>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-2">
+          <Label>{t('wallet.category')}</Label>
           <select
-            className="form-control"
+            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             value={formCategory}
             onChange={e => setFormCategory(e.target.value)}
           >
@@ -1233,11 +1237,10 @@ function ExpenseForm({
             ))}
           </select>
         </div>
-        <div className="form-group">
-          <label className="form-label">{t('wallet.date')}</label>
-          <input
+        <div className="space-y-2">
+          <Label>{t('wallet.date')}</Label>
+          <Input
             type="datetime-local"
-            className="form-control"
             value={formDate}
             onChange={e => setFormDate(e.target.value)}
           />
@@ -1245,29 +1248,21 @@ function ExpenseForm({
       </div>
 
       {/* Split type */}
-      <div className="form-group">
-        <label className="form-label">{t('wallet.splitType')}</label>
-        <div style={{ display: 'flex', gap: 8 }}>
+      <div className="space-y-2">
+        <Label>{t('wallet.splitType')}</Label>
+        <div className="flex gap-2 flex-wrap">
           {[
             { value: 'both', label: t('wallet.bothBoats') },
-            { value: 'boat1', label: t('wallet.boat1Only') },
-            { value: 'boat2', label: t('wallet.boat2Only') },
+            ...boats.map(b => ({ value: String(b.id), label: `${b.name} only` })),
           ].map(opt => (
             <label
               key={opt.value}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                padding: '8px 14px',
-                borderRadius: 8,
-                border: `2px solid ${formSplitType === opt.value ? 'var(--color-primary)' : 'var(--color-border)'}`,
-                background: formSplitType === opt.value ? 'var(--color-primary-bg)' : 'transparent',
-                cursor: 'pointer',
-                fontSize: '0.85rem',
-                fontWeight: formSplitType === opt.value ? 600 : 400,
-                transition: 'all 0.15s ease',
-              }}
+              className={cn(
+                'flex items-center gap-1.5 px-3.5 py-2 rounded-lg border-2 cursor-pointer text-sm transition-all',
+                formSplitType === opt.value
+                  ? 'border-primary bg-primary/10 font-semibold'
+                  : 'border-border'
+              )}
             >
               <input
                 type="radio"
@@ -1275,7 +1270,7 @@ function ExpenseForm({
                 value={opt.value}
                 checked={formSplitType === opt.value}
                 onChange={() => setFormSplitType(opt.value)}
-                style={{ display: 'none' }}
+                className="hidden"
               />
               {opt.label}
             </label>
@@ -1284,31 +1279,31 @@ function ExpenseForm({
       </div>
 
       {/* Split users */}
-      <div className="form-group">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-          <label className="form-label" style={{ margin: 0 }}>
+      <div className="space-y-2">
+        <div className="flex justify-between items-center">
+          <Label className="mb-0">
             {t('wallet.splitBetween')} ({formSplitUsers.length}/{usersForSplitType.length})
-          </label>
-          <div style={{ display: 'flex', gap: 6 }}>
-            <button
+          </Label>
+          <div className="flex gap-1.5">
+            <Button
               type="button"
-              className="btn btn-sm btn-outline"
+              variant="outline"
+              size="xs"
               onClick={selectAllSplitUsers}
-              style={{ fontSize: '0.75rem', padding: '4px 8px' }}
             >
               {t('common.all')}
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
-              className="btn btn-sm btn-outline"
+              variant="outline"
+              size="xs"
               onClick={deselectAllSplitUsers}
-              style={{ fontSize: '0.75rem', padding: '4px 8px' }}
             >
               None
-            </button>
+            </Button>
           </div>
         </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        <div className="flex flex-wrap gap-1.5">
           {usersForSplitType.map(u => {
             const selected = formSplitUsers.includes(u.id);
             return (
@@ -1316,25 +1311,16 @@ function ExpenseForm({
                 key={u.id}
                 type="button"
                 onClick={() => toggleSplitUser(u.id)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  padding: '6px 12px',
-                  borderRadius: 20,
-                  border: `2px solid ${selected ? 'var(--color-primary)' : 'var(--color-border)'}`,
-                  background: selected ? 'var(--color-primary-bg)' : 'transparent',
-                  cursor: 'pointer',
-                  fontSize: '0.82rem',
-                  fontWeight: selected ? 600 : 400,
-                  color: 'var(--color-text)',
-                  fontFamily: 'inherit',
-                  transition: 'all 0.15s ease',
-                }}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded-full border-2 cursor-pointer text-sm transition-all',
+                  selected
+                    ? 'border-primary bg-primary/10 font-semibold'
+                    : 'border-border'
+                )}
               >
-                <Avatar name={u.name} avatar={u.avatar} size="sm" userId={u.id} />
+                <UserAvatar name={u.name} avatar={u.avatar} userId={u.id} />
                 {u.name}
-                {selected && <Check size={14} style={{ color: 'var(--color-primary)' }} />}
+                {selected && <Check size={14} className="text-primary" />}
               </button>
             );
           })}
@@ -1355,59 +1341,53 @@ function AuditLogView({
 }) {
   if (logs.length === 0) {
     return (
-      <p style={{ color: 'var(--color-text-secondary)', textAlign: 'center', padding: 20 }}>
+      <p className="text-muted-foreground text-center py-5">
         No audit history found.
       </p>
     );
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div className="flex flex-col gap-3">
       {logs.map(log => (
         <div
           key={log.id}
-          style={{
-            padding: '12px 14px',
-            border: '1px solid var(--color-border)',
-            borderRadius: 8,
-            fontSize: '0.82rem',
-          }}
+          className="p-3 border border-border rounded-lg text-sm"
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-            <span
-              className={`badge ${
-                log.change_type === 'create'
-                  ? 'badge-success'
-                  : log.change_type === 'edit'
-                  ? 'badge-warning'
-                  : 'badge-danger'
-              }`}
-              style={{ textTransform: 'uppercase', fontSize: '0.7rem', fontWeight: 700 }}
+          <div className="flex justify-between items-center mb-1.5">
+            <Badge
+              variant="outline"
+              className={cn(
+                'uppercase text-[0.65rem] font-bold',
+                log.change_type === 'create' && 'border-green-500 text-green-600 dark:text-green-400',
+                log.change_type === 'edit' && 'border-yellow-500 text-yellow-600 dark:text-yellow-400',
+                log.change_type === 'delete' && 'border-destructive text-destructive',
+              )}
             >
               {log.change_type}
-            </span>
-            <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.75rem' }}>
+            </Badge>
+            <span className="text-xs text-muted-foreground">
               {formatDateTime(log.changed_at)}
             </span>
           </div>
-          <div style={{ color: 'var(--color-text-secondary)' }}>
+          <div className="text-muted-foreground">
             by {log.changed_by_name || 'Unknown'}
           </div>
           {log.change_type === 'edit' && log.old_values && log.new_values && (
-            <div style={{ marginTop: 8, fontSize: '0.78rem' }}>
+            <div className="mt-2 text-xs">
               {Object.keys(log.new_values).map(key => {
                 const oldVal = log.old_values?.[key];
                 const newVal = log.new_values?.[key];
                 if (JSON.stringify(oldVal) === JSON.stringify(newVal)) return null;
                 if (key === 'split_users') return null;
                 return (
-                  <div key={key} style={{ marginBottom: 2 }}>
-                    <span style={{ color: 'var(--color-text-secondary)' }}>{key}:</span>{' '}
-                    <span style={{ textDecoration: 'line-through', color: 'var(--color-danger)', opacity: 0.7 }}>
+                  <div key={key} className="mb-0.5">
+                    <span className="text-muted-foreground">{key}:</span>{' '}
+                    <span className="line-through text-destructive/70">
                       {String(oldVal ?? '')}
                     </span>{' '}
-                    <ArrowRight size={10} style={{ display: 'inline' }} />{' '}
-                    <span style={{ color: 'var(--color-success)' }}>
+                    <ArrowRight size={10} className="inline" />{' '}
+                    <span className="text-green-600 dark:text-green-400">
                       {String(newVal ?? '')}
                     </span>
                   </div>

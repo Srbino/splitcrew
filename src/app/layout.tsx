@@ -1,10 +1,20 @@
-import type { Metadata } from 'next';
-import '@/styles/style.css';
+import type { Metadata, Viewport } from 'next';
+import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'CrewSplit',
+  title: 'SplitCrew',
   description: 'Self-hosted trip management for sailing crews',
   icons: { icon: '/img/logo.png' },
+};
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
+    { media: '(prefers-color-scheme: dark)', color: '#000000' },
+  ],
 };
 
 export default function RootLayout({
@@ -20,12 +30,12 @@ export default function RootLayout({
             __html: `(function(){
               var t = localStorage.getItem('theme');
               if (!t) t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-              document.documentElement.setAttribute('data-theme', t);
+              if (t === 'dark') document.documentElement.classList.add('dark');
             })();`,
           }}
         />
       </head>
-      <body>{children}</body>
+      <body className="min-h-screen bg-background text-foreground antialiased">{children}</body>
     </html>
   );
 }

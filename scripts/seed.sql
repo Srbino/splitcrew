@@ -1,56 +1,68 @@
 -- CrewSplit – Seed data for development
--- Admin password: admin123 | Member password: crew123
+-- Admin password: admin123
+-- All user passwords: pass1234
 
--- BOATS
-INSERT INTO boats (id, name, description) VALUES
-(1, 'Stella', 'Bavaria Cruiser 46'),
-(2, 'Blue Lagoon', 'Jeanneau Sun Odyssey 440')
-ON CONFLICT DO NOTHING;
+-- BOATS (with emoji + color)
+INSERT INTO boats (id, name, emoji, color, description) VALUES
+(1, 'Stella',       '⛵', 'blue',   'Bavaria Cruiser 46'),
+(2, 'Blue Lagoon',  '🌊', 'teal',   'Jeanneau Sun Odyssey 440')
+ON CONFLICT (id) DO UPDATE SET
+  name = EXCLUDED.name, emoji = EXCLUDED.emoji,
+  color = EXCLUDED.color, description = EXCLUDED.description;
 SELECT setval('boats_id_seq', 2);
 
--- USERS (10 members – 5 per boat)
-INSERT INTO users (id, name, phone, email, boat_id) VALUES
-(1,  'Paul Newman',        '+420 601 111 111', 'paul@example.com',     1),
-(2,  'Jane Rivers',        '+420 602 222 222', 'jane@example.com',     1),
-(3,  'Tom Taylor',         '+420 603 333 333', 'tom@example.com',      1),
-(4,  'Kate Davis',         '+420 604 444 444', NULL,                   1),
-(5,  'Andrew Stone',       NULL,               'andrew@example.com',   1),
-(6,  'Lucy Martin',        '+420 606 666 666', 'lucy@example.com',     2),
-(7,  'Martin Blake',       '+420 607 777 777', NULL,                   2),
-(8,  'Eva Brooks',         NULL,               'eva@example.com',      2),
-(9,  'Jake Black',         '+420 609 999 999', 'jake@example.com',     2),
-(10, 'Tessa Wells',        NULL,               NULL,                   2)
-ON CONFLICT DO NOTHING;
+-- USERS (10 members – 5 per boat, each with password_hash for "pass1234")
+-- bcrypt hash of "pass1234" at cost 12
+-- Paul (boat1) and Lucy (boat2) are captains
+INSERT INTO users (id, name, phone, email, avatar, boat_id, password_hash, role) VALUES
+(1,  'Paul Newman',        '+420 601 111 111', 'paul@example.com',     'avatars/seed_user_1.svg',  1, '$2b$12$uvN1iKXEA4hEIvxniXsykeQq4OfKOWhldP8.P5VsUqiLjcsUFcPnu', 'captain'),
+(2,  'Jane Rivers',        '+420 602 222 222', 'jane@example.com',     'avatars/seed_user_2.svg',  1, '$2b$12$uvN1iKXEA4hEIvxniXsykeQq4OfKOWhldP8.P5VsUqiLjcsUFcPnu', 'crew'),
+(3,  'Tom Taylor',         '+420 603 333 333', 'tom@example.com',      'avatars/seed_user_3.svg',  1, '$2b$12$uvN1iKXEA4hEIvxniXsykeQq4OfKOWhldP8.P5VsUqiLjcsUFcPnu', 'crew'),
+(4,  'Kate Davis',         '+420 604 444 444', NULL,                   'avatars/seed_user_4.svg',  1, '$2b$12$uvN1iKXEA4hEIvxniXsykeQq4OfKOWhldP8.P5VsUqiLjcsUFcPnu', 'crew'),
+(5,  'Andrew Stone',       NULL,               'andrew@example.com',   'avatars/seed_user_5.svg',  1, '$2b$12$uvN1iKXEA4hEIvxniXsykeQq4OfKOWhldP8.P5VsUqiLjcsUFcPnu', 'crew'),
+(6,  'Lucy Martin',        '+420 606 666 666', 'lucy@example.com',     'avatars/seed_user_6.svg',  2, '$2b$12$uvN1iKXEA4hEIvxniXsykeQq4OfKOWhldP8.P5VsUqiLjcsUFcPnu', 'captain'),
+(7,  'Martin Blake',       '+420 607 777 777', NULL,                   'avatars/seed_user_7.svg',  2, '$2b$12$uvN1iKXEA4hEIvxniXsykeQq4OfKOWhldP8.P5VsUqiLjcsUFcPnu', 'crew'),
+(8,  'Eva Brooks',         NULL,               'eva@example.com',      'avatars/seed_user_8.svg',  2, '$2b$12$uvN1iKXEA4hEIvxniXsykeQq4OfKOWhldP8.P5VsUqiLjcsUFcPnu', 'crew'),
+(9,  'Jake Black',         '+420 609 999 999', 'jake@example.com',     'avatars/seed_user_9.svg',  2, '$2b$12$uvN1iKXEA4hEIvxniXsykeQq4OfKOWhldP8.P5VsUqiLjcsUFcPnu', 'crew'),
+(10, 'Tessa Wells',        NULL,               NULL,                   'avatars/seed_user_10.svg', 2, '$2b$12$uvN1iKXEA4hEIvxniXsykeQq4OfKOWhldP8.P5VsUqiLjcsUFcPnu', 'crew')
+ON CONFLICT (id) DO UPDATE SET
+  name = EXCLUDED.name, phone = EXCLUDED.phone, email = EXCLUDED.email,
+  avatar = EXCLUDED.avatar, boat_id = EXCLUDED.boat_id,
+  password_hash = EXCLUDED.password_hash, role = EXCLUDED.role;
 SELECT setval('users_id_seq', 10);
 
--- SETTINGS
+-- SETTINGS (no member_password — passwords are per-user now)
 INSERT INTO settings (setting_key, setting_value) VALUES
 ('installed',             '1'),
-('trip_name',             'Adriatic Sailing Trip 2025'),
-('trip_date_from',        '2025-07-15'),
-('trip_date_to',          '2025-07-25'),
+('trip_name',             'Adriatic Sailing 2026'),
+('trip_date_from',        '2026-07-15'),
+('trip_date_to',          '2026-07-25'),
 ('admin_password',        '$2b$12$81bKXXZGg52ntRZGEOnjlegvoO82ygMgVQ3OlwqcemFgxf8eYPQ4S'),
-('member_password',       '$2b$12$FeOTpAx02r7ewr.CpZoqr.iwBbmedWvBo5Ieh1lxJfII60rJ5.DMu'),
 ('base_currency',         'EUR'),
 ('language',              'en'),
-('exchange_rate',         '25.21'),
-('exchange_rate_updated', '2025-07-14')
+('app_icon',              '⛵'),
+('allowed_currencies',   '["EUR","CZK"]'),
+('export_currency',      'CZK')
 ON CONFLICT (setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value;
 
--- ITINERARY
+-- Remove legacy member_password if it exists
+DELETE FROM settings WHERE setting_key = 'member_password';
+
+-- ITINERARY (2026 dates)
+DELETE FROM itinerary;
 INSERT INTO itinerary (day_number, date, title, description, location_from, location_to, type, sort_order) VALUES
-(0,  '2025-07-14', 'Departure from home',        'Morning departure by car through Austria to Italy. Meeting point 5:00 AM.',    'Home',           'Caorle',         'car',     0),
-(1,  '2025-07-15', 'Arrival at marina',           'Boat check-in, provisioning, getting to know the boat. Evening barbecue.',     'Caorle Marina',  'Caorle Marina',  'port',    1),
-(2,  '2025-07-16', 'Caorle → Poreč',             'First leg! Crossing the Adriatic, approx. 40 NM. Wind expected NE 3–4 Bf.',   'Caorle',         'Poreč',          'sailing', 2),
-(3,  '2025-07-17', 'Poreč → Rovinj',             'Short leg along the Istrian coast. Afternoon sightseeing in Rovinj.',         'Poreč',          'Rovinj',         'sailing', 3),
-(4,  '2025-07-18', 'Day off – Rovinj',            'Snorkeling at Red Island, stroll through the old town.',                       'Rovinj',         'Rovinj',         'port',    4),
-(5,  '2025-07-19', 'Rovinj → Pula',              'Sailing around Cape Kamenjak. Stop in a bay for swimming.',                    'Rovinj',         'Pula',           'sailing', 5),
-(6,  '2025-07-20', 'Pula – sightseeing',          'Full day in Pula – amphitheater, Temple of Augustus, fish market.',            'Pula',           'Pula',           'port',    6),
-(7,  '2025-07-21', 'Pula → Cres',                'Crossing to the island of Cres. Anchoring in the bay of Valun.',               'Pula',           'Cres (Valun)',   'sailing', 7),
-(8,  '2025-07-22', 'Cres → Mali Lošinj',         'Crossing through the strait. Mali Lošinj – town with a palm-lined promenade.','Cres',           'Mali Lošinj',    'sailing', 8),
-(9,  '2025-07-23', 'Day off – Mali Lošinj',       'Relaxation, diving, hike to Veli Lošinj on foot.',                            'Mali Lošinj',    'Mali Lošinj',    'port',    9),
-(10, '2025-07-24', 'Mali Lošinj → Caorle',       'Return crossing over the Adriatic. Long leg, early morning start.',            'Mali Lošinj',    'Caorle',         'sailing', 10),
-(11, '2025-07-25', 'Boat handover and return',    'Cleaning the boats, handover at the marina. Afternoon departure by car home.', 'Caorle',         'Home',           'car',     11)
+(0,  '2026-07-14', 'Departure from home',        'Morning departure by car through Austria to Italy. Meeting point 5:00 AM.',    'Home',           'Caorle',         'car',     0),
+(1,  '2026-07-15', 'Arrival at marina',           'Boat check-in, provisioning, getting to know the boat. Evening barbecue.',     'Caorle Marina',  'Caorle Marina',  'port',    1),
+(2,  '2026-07-16', 'Caorle → Poreč',             'First leg! Crossing the Adriatic, approx. 40 NM. Wind expected NE 3–4 Bf.',   'Caorle',         'Poreč',          'sailing', 2),
+(3,  '2026-07-17', 'Poreč → Rovinj',             'Short leg along the Istrian coast. Afternoon sightseeing in Rovinj.',         'Poreč',          'Rovinj',         'sailing', 3),
+(4,  '2026-07-18', 'Day off – Rovinj',            'Snorkeling at Red Island, stroll through the old town.',                       'Rovinj',         'Rovinj',         'port',    4),
+(5,  '2026-07-19', 'Rovinj → Pula',              'Sailing around Cape Kamenjak. Stop in a bay for swimming.',                    'Rovinj',         'Pula',           'sailing', 5),
+(6,  '2026-07-20', 'Pula – sightseeing',          'Full day in Pula – amphitheater, Temple of Augustus, fish market.',            'Pula',           'Pula',           'port',    6),
+(7,  '2026-07-21', 'Pula → Cres',                'Crossing to the island of Cres. Anchoring in the bay of Valun.',               'Pula',           'Cres (Valun)',   'sailing', 7),
+(8,  '2026-07-22', 'Cres → Mali Lošinj',         'Crossing through the strait. Mali Lošinj – town with a palm-lined promenade.','Cres',           'Mali Lošinj',    'sailing', 8),
+(9,  '2026-07-23', 'Day off – Mali Lošinj',       'Relaxation, diving, hike to Veli Lošinj on foot.',                            'Mali Lošinj',    'Mali Lošinj',    'port',    9),
+(10, '2026-07-24', 'Mali Lošinj → Caorle',       'Return crossing over the Adriatic. Long leg, early morning start.',            'Mali Lošinj',    'Caorle',         'sailing', 10),
+(11, '2026-07-25', 'Boat handover and return',    'Cleaning the boats, handover at the marina. Afternoon departure by car home.', 'Caorle',         'Home',           'car',     11)
 ON CONFLICT DO NOTHING;
 
 -- CHECKLIST
@@ -75,27 +87,27 @@ INSERT INTO checklist (category, item_name, description, sort_order) VALUES
 ('recommended',  'Evening game',                 'Cards, board games, UNO...',                           4)
 ON CONFLICT DO NOTHING;
 
--- WALLET EXPENSES
+-- WALLET EXPENSES (2026 dates)
 INSERT INTO wallet_expenses (id, paid_by, amount, currency, amount_eur, exchange_rate, description, category, expense_date, split_type, created_by) VALUES
-(1,  2,  2500.00, 'CZK',  99.17, 25.21, 'Medicine and first aid kit',               'other', '2025-07-13 14:00:00', 'both',  2),
-(2,  1,  3200.00, 'CZK', 126.93, 25.21, 'Highway tolls AT + HR',                    'other', '2025-07-14 06:00:00', 'both',  1),
-(3,  1,   180.00, 'EUR', 180.00, 25.21, 'Big grocery shopping at marina',            'other', '2025-07-15 16:00:00', 'both',  1),
-(4,  6,   120.00, 'EUR', 120.00, 25.21, 'Big grocery shopping – boat 2',             'other', '2025-07-15 16:30:00', 'boat2', 6),
-(5,  3,    45.00, 'EUR',  45.00, 25.21, 'Barbecue – meat and vegetables',            'other', '2025-07-15 18:00:00', 'both',  3),
-(6,  4,    85.00, 'EUR',  85.00, 25.21, 'Diesel – Stella',                           'other', '2025-07-16 08:00:00', 'boat1', 4),
-(7,  9,    78.00, 'EUR',  78.00, 25.21, 'Diesel – Blue Lagoon',                      'other', '2025-07-16 08:30:00', 'boat2', 9),
-(8,  7,    65.00, 'EUR',  65.00, 25.21, 'Port Poreč – fee for both boats',           'other', '2025-07-16 15:00:00', 'both',  7),
-(9,  1,    42.00, 'EUR',  42.00, 25.21, 'Dinner in Poreč – pizza for everyone',      'other', '2025-07-16 20:00:00', 'both',  1),
-(10, 6,    55.00, 'EUR',  55.00, 25.21, 'Port Rovinj',                               'other', '2025-07-17 14:00:00', 'both',  6),
-(11, 8,  1200.00, 'CZK',  47.60, 25.21, 'Ice cream and coffees for everyone',        'other', '2025-07-18 11:00:00', 'both',  8),
-(12, 5,    38.00, 'EUR',  38.00, 25.21, 'Snorkel gear – rental',                     'other', '2025-07-18 14:00:00', 'boat1', 5),
-(13, 9,    92.00, 'EUR',  92.00, 25.21, 'Diesel + water – Blue Lagoon',              'other', '2025-07-19 07:00:00', 'boat2', 9),
-(14, 3,    75.00, 'EUR',  75.00, 25.21, 'Diesel + water – Stella',                   'other', '2025-07-19 07:30:00', 'boat1', 3),
-(15, 7,   110.00, 'EUR', 110.00, 25.21, 'Dinner in Pula – fish restaurant',          'other', '2025-07-20 20:00:00', 'both',  7)
-ON CONFLICT DO NOTHING;
+(1,  2,  2500.00, 'CZK',  99.17, 25.21, 'Medicine and first aid kit',               'other',          '2026-07-13 14:00:00', 'both',  2),
+(2,  1,  3200.00, 'CZK', 126.93, 25.21, 'Highway tolls AT + HR',                    'transport',      '2026-07-14 06:00:00', 'both',  1),
+(3,  1,   180.00, 'EUR', 180.00, NULL,   'Big grocery shopping at marina',            'food',           '2026-07-15 16:00:00', 'both',  1),
+(4,  6,   120.00, 'EUR', 120.00, NULL,   'Big grocery shopping – boat 2',             'food',           '2026-07-15 16:30:00', 'boat2', 6),
+(5,  3,    45.00, 'EUR',  45.00, NULL,   'Barbecue – meat and vegetables',            'food',           '2026-07-15 18:00:00', 'both',  3),
+(6,  4,    85.00, 'EUR',  85.00, NULL,   'Diesel – Stella',                           'fuel',           '2026-07-16 08:00:00', 'boat1', 4),
+(7,  9,    78.00, 'EUR',  78.00, NULL,   'Diesel – Blue Lagoon',                      'fuel',           '2026-07-16 08:30:00', 'boat2', 9),
+(8,  7,    65.00, 'EUR',  65.00, NULL,   'Port Poreč – fee for both boats',           'marina',         '2026-07-16 15:00:00', 'both',  7),
+(9,  1,    42.00, 'EUR',  42.00, NULL,   'Dinner in Poreč – pizza for everyone',      'food',           '2026-07-16 20:00:00', 'both',  1),
+(10, 6,    55.00, 'EUR',  55.00, NULL,   'Port Rovinj',                               'marina',         '2026-07-17 14:00:00', 'both',  6),
+(11, 8,  1200.00, 'CZK',  47.60, 25.21, 'Ice cream and coffees for everyone',        'food',           '2026-07-18 11:00:00', 'both',  8),
+(12, 5,    38.00, 'EUR',  38.00, NULL,   'Snorkel gear – rental',                     'entertainment',  '2026-07-18 14:00:00', 'boat1', 5),
+(13, 9,    92.00, 'EUR',  92.00, NULL,   'Diesel + water – Blue Lagoon',              'fuel',           '2026-07-19 07:00:00', 'boat2', 9),
+(14, 3,    75.00, 'EUR',  75.00, NULL,   'Diesel + water – Stella',                   'fuel',           '2026-07-19 07:30:00', 'boat1', 3),
+(15, 7,   110.00, 'EUR', 110.00, NULL,   'Dinner in Pula – fish restaurant',          'food',           '2026-07-20 20:00:00', 'both',  7)
+ON CONFLICT (id) DO NOTHING;
 SELECT setval('wallet_expenses_id_seq', 15);
 
--- SPLITS
+-- SPLITS (unchanged amounts)
 INSERT INTO wallet_expense_splits (expense_id, user_id, amount_eur) VALUES
 (1, 1, 9.92), (1, 2, 9.92), (1, 3, 9.92), (1, 4, 9.92), (1, 5, 9.92),
 (1, 6, 9.91), (1, 7, 9.91), (1, 8, 9.91), (1, 9, 9.92), (1, 10, 9.92),
@@ -120,22 +132,24 @@ INSERT INTO wallet_expense_splits (expense_id, user_id, amount_eur) VALUES
 (13, 6, 18.40), (13, 7, 18.40), (13, 8, 18.40), (13, 9, 18.40), (13, 10, 18.40),
 (14, 1, 15.00), (14, 2, 15.00), (14, 3, 15.00), (14, 4, 15.00), (14, 5, 15.00),
 (15, 1, 11.00), (15, 2, 11.00), (15, 3, 11.00), (15, 4, 11.00), (15, 5, 11.00),
-(15, 6, 11.00), (15, 7, 11.00), (15, 8, 11.00), (15, 9, 11.00), (15, 10, 11.00);
+(15, 6, 11.00), (15, 7, 11.00), (15, 8, 11.00), (15, 9, 11.00), (15, 10, 11.00)
+ON CONFLICT DO NOTHING;
 
--- AUDIT LOG
+-- AUDIT LOG (2026 dates)
 INSERT INTO wallet_audit_log (expense_id, changed_by, change_type, old_values, new_values, changed_at) VALUES
-(1,  2, 'created', NULL, '{"amount":"2500.00","currency":"CZK","description":"Medicine and first aid kit"}', '2025-07-13 14:00:00'),
-(2,  1, 'created', NULL, '{"amount":"3200.00","currency":"CZK","description":"Highway tolls AT + HR"}', '2025-07-14 06:00:00'),
-(3,  1, 'created', NULL, '{"amount":"180.00","currency":"EUR","description":"Big grocery shopping at marina"}', '2025-07-15 16:00:00'),
-(4,  6, 'created', NULL, '{"amount":"120.00","currency":"EUR","description":"Big grocery shopping – boat 2"}', '2025-07-15 16:30:00'),
-(5,  3, 'created', NULL, '{"amount":"45.00","currency":"EUR","description":"Barbecue – meat and vegetables"}', '2025-07-15 18:00:00'),
-(9,  1, 'created', NULL, '{"amount":"42.00","currency":"EUR","description":"Dinner in Poreč"}', '2025-07-16 20:00:00'),
-(9,  1, 'edited',  '{"description":"Dinner in Poreč"}', '{"description":"Dinner in Poreč – pizza for everyone"}', '2025-07-16 20:15:00'),
-(15, 7, 'created', NULL, '{"amount":"110.00","currency":"EUR","description":"Dinner in Pula – fish restaurant"}', '2025-07-20 20:00:00');
+(1,  2, 'created', NULL, '{"amount":"2500.00","currency":"CZK","description":"Medicine and first aid kit"}', '2026-07-13 14:00:00'),
+(2,  1, 'created', NULL, '{"amount":"3200.00","currency":"CZK","description":"Highway tolls AT + HR"}', '2026-07-14 06:00:00'),
+(3,  1, 'created', NULL, '{"amount":"180.00","currency":"EUR","description":"Big grocery shopping at marina"}', '2026-07-15 16:00:00'),
+(4,  6, 'created', NULL, '{"amount":"120.00","currency":"EUR","description":"Big grocery shopping – boat 2"}', '2026-07-15 16:30:00'),
+(5,  3, 'created', NULL, '{"amount":"45.00","currency":"EUR","description":"Barbecue – meat and vegetables"}', '2026-07-15 18:00:00'),
+(9,  1, 'created', NULL, '{"amount":"42.00","currency":"EUR","description":"Dinner in Poreč"}', '2026-07-16 20:00:00'),
+(9,  1, 'edited',  '{"description":"Dinner in Poreč"}', '{"description":"Dinner in Poreč – pizza for everyone"}', '2026-07-16 20:15:00'),
+(15, 7, 'created', NULL, '{"amount":"110.00","currency":"EUR","description":"Dinner in Pula – fish restaurant"}', '2026-07-20 20:00:00')
+ON CONFLICT DO NOTHING;
 
 -- SETTLEMENTS
 INSERT INTO wallet_settled (from_user_id, to_user_id, settled_at, settled_by) VALUES
-(10, 1, '2025-07-18 12:00:00', 10)
+(10, 1, '2026-07-18 12:00:00', 10)
 ON CONFLICT DO NOTHING;
 
 -- SHOPPING LIST – BOAT 1
@@ -166,40 +180,40 @@ INSERT INTO shopping_items (boat_id, category, item_name, quantity, assigned_to,
 (2, 'hygiene',   'Mosquito repellent',        '1 pc',     NULL, 89.00, 'CZK', NULL,                              false, NULL, 8),
 (2, 'other',     'Trash bags',                '1 roll',   6,    1.20,  'EUR', NULL,                              true,  6,    6);
 
--- LOGBOOK – BOAT 1
+-- LOGBOOK – BOAT 1 (2026 dates)
 INSERT INTO logbook (boat_id, date, location_from, location_to, nautical_miles, departure_time, arrival_time, skipper_user_id, note, created_by) VALUES
-(1, '2025-07-16', 'Caorle',     'Poreč',       42.5, '08:00:00', '14:30:00', 1, 'Excellent wind NE 3–4 Bf, sailed the entire way. Smooth sea.',                        1),
-(1, '2025-07-17', 'Poreč',      'Rovinj',      18.2, '09:30:00', '12:00:00', 1, 'Calm sea, snorkeling in the bay below Red Island.',                                   2),
-(1, '2025-07-19', 'Rovinj',     'Pula',        24.8, '07:00:00', '12:30:00', 3, 'Sailed around Cape Kamenjak. Beautiful cliffs, dolphins!',                             3),
-(1, '2025-07-21', 'Pula',       'Cres (Valun)', 35.2, '06:30:00', '14:00:00', 1, 'Longer leg across open sea. Wind picked up to 5 Bf in the afternoon.',                1),
-(1, '2025-07-22', 'Cres',       'Mali Lošinj', 15.6, '09:00:00', '11:30:00', 5, 'Passage through the narrow strait – wonderful experience. Andrew at the helm for the first time.', 5),
-(1, '2025-07-24', 'Mali Lošinj','Caorle',      44.8, '05:00:00', '15:00:00', 1, 'Longest leg. Started in the dark, sunset at sea. Arrived tired but happy.',            1);
+(1, '2026-07-16', 'Caorle',     'Poreč',       42.5, '08:00:00', '14:30:00', 1, 'Excellent wind NE 3–4 Bf, sailed the entire way. Smooth sea.',                        1),
+(1, '2026-07-17', 'Poreč',      'Rovinj',      18.2, '09:30:00', '12:00:00', 1, 'Calm sea, snorkeling in the bay below Red Island.',                                   2),
+(1, '2026-07-19', 'Rovinj',     'Pula',        24.8, '07:00:00', '12:30:00', 3, 'Sailed around Cape Kamenjak. Beautiful cliffs, dolphins!',                             3),
+(1, '2026-07-21', 'Pula',       'Cres (Valun)', 35.2, '06:30:00', '14:00:00', 1, 'Longer leg across open sea. Wind picked up to 5 Bf in the afternoon.',                1),
+(1, '2026-07-22', 'Cres',       'Mali Lošinj', 15.6, '09:00:00', '11:30:00', 5, 'Passage through the narrow strait – wonderful experience. Andrew at the helm for the first time.', 5),
+(1, '2026-07-24', 'Mali Lošinj','Caorle',      44.8, '05:00:00', '15:00:00', 1, 'Longest leg. Started in the dark, sunset at sea. Arrived tired but happy.',            1);
 
--- LOGBOOK – BOAT 2
+-- LOGBOOK – BOAT 2 (2026 dates)
 INSERT INTO logbook (boat_id, date, location_from, location_to, nautical_miles, departure_time, arrival_time, skipper_user_id, note, created_by) VALUES
-(2, '2025-07-16', 'Caorle',     'Poreč',        41.8, '08:15:00', '14:45:00', 6, 'A bit choppy at the start, then it calmed down. Good sailing.',                       6),
-(2, '2025-07-17', 'Poreč',      'Rovinj',       17.5, '10:00:00', '12:30:00', 6, 'Short leg, stopped in a bay for a swim.',                                             7),
-(2, '2025-07-19', 'Rovinj',     'Pula',         25.1, '07:30:00', '13:00:00', 9, 'Jake at the helm, handled it brilliantly. Lunch stop in Fažana.',                     9),
-(2, '2025-07-21', 'Pula',       'Cres (Valun)', 34.8, '06:45:00', '14:15:00', 6, 'Tough day – 1.5m waves, but the boat handled it superbly.',                           6),
-(2, '2025-07-22', 'Cres',       'Mali Lošinj',  16.2, '09:15:00', '12:00:00', 9, 'Calm day, snorkeling along the way.',                                                  8),
-(2, '2025-07-24', 'Mali Lošinj','Caorle',       45.1, '04:45:00', '15:30:00', 6, 'Night start – beautiful stars. Longest leg, but everyone in good spirits.',            6);
+(2, '2026-07-16', 'Caorle',     'Poreč',        41.8, '08:15:00', '14:45:00', 6, 'A bit choppy at the start, then it calmed down. Good sailing.',                       6),
+(2, '2026-07-17', 'Poreč',      'Rovinj',       17.5, '10:00:00', '12:30:00', 6, 'Short leg, stopped in a bay for a swim.',                                             7),
+(2, '2026-07-19', 'Rovinj',     'Pula',         25.1, '07:30:00', '13:00:00', 9, 'Jake at the helm, handled it brilliantly. Lunch stop in Fažana.',                     9),
+(2, '2026-07-21', 'Pula',       'Cres (Valun)', 34.8, '06:45:00', '14:15:00', 6, 'Tough day – 1.5m waves, but the boat handled it superbly.',                           6),
+(2, '2026-07-22', 'Cres',       'Mali Lošinj',  16.2, '09:15:00', '12:00:00', 9, 'Calm day, snorkeling along the way.',                                                  8),
+(2, '2026-07-24', 'Mali Lošinj','Caorle',       45.1, '04:45:00', '15:30:00', 6, 'Night start – beautiful stars. Longest leg, but everyone in good spirits.',            6);
 
--- MENU
+-- MENU (2026 dates)
 INSERT INTO menu_plan (boat_id, date, meal_type, cook_user_id, meal_description, note, created_by) VALUES
-(1, '2025-07-15', 'lunch', 1,    'Grilled sausages with potatoes',      'First day – keeping it simple',   1),
-(1, '2025-07-16', 'lunch', 2,    'Tuna pasta salad',                    'Cold meal at sea',                2),
-(1, '2025-07-17', 'lunch', 3,    'Spaghetti aglio olio',                'Italian classic',                 3),
-(1, '2025-07-18', 'lunch', 4,    'Greek salad with feta',               'Day off – light lunch',           4),
-(1, '2025-07-19', 'lunch', 5,    'Seafood risotto',                     'Andrew showed off!',              5),
-(1, '2025-07-21', 'lunch', 1,    'Canned goulash + bread rolls',        'Nothing complicated at sea',      1),
-(1, '2025-07-22', 'lunch', 2,    'Caprese + baguette',                  NULL,                              2),
-(2, '2025-07-15', 'lunch', 6,    'Chicken steak with rice',             'Brought from home',               6),
-(2, '2025-07-16', 'lunch', 7,    'Chicken and vegetable wrap',          NULL,                              7),
-(2, '2025-07-17', 'lunch', 8,    'Penne all''arrabbiata',               'Eva makes it great',              8),
-(2, '2025-07-18', 'lunch', 9,    'Grilled vegetables + halloumi',       'Vegetarian day',                  9),
-(2, '2025-07-19', 'lunch', 10,   'Fish tacos',                          'From freshly bought catch',      10),
-(2, '2025-07-21', 'lunch', 6,    'One-pot lentil soup',                 NULL,                              6),
-(2, '2025-07-22', 'lunch', 7,    'Tomato bruschetta',                   'Quick and tasty',                 7)
+(1, '2026-07-15', 'lunch', 1,    'Grilled sausages with potatoes',      'First day – keeping it simple',   1),
+(1, '2026-07-16', 'lunch', 2,    'Tuna pasta salad',                    'Cold meal at sea',                2),
+(1, '2026-07-17', 'lunch', 3,    'Spaghetti aglio olio',                'Italian classic',                 3),
+(1, '2026-07-18', 'lunch', 4,    'Greek salad with feta',               'Day off – light lunch',           4),
+(1, '2026-07-19', 'lunch', 5,    'Seafood risotto',                     'Andrew showed off!',              5),
+(1, '2026-07-21', 'lunch', 1,    'Canned goulash + bread rolls',        'Nothing complicated at sea',      1),
+(1, '2026-07-22', 'lunch', 2,    'Caprese + baguette',                  NULL,                              2),
+(2, '2026-07-15', 'lunch', 6,    'Chicken steak with rice',             'Brought from home',               6),
+(2, '2026-07-16', 'lunch', 7,    'Chicken and vegetable wrap',          NULL,                              7),
+(2, '2026-07-17', 'lunch', 8,    'Penne all''arrabbiata',               'Eva makes it great',              8),
+(2, '2026-07-18', 'lunch', 9,    'Grilled vegetables + halloumi',       'Vegetarian day',                  9),
+(2, '2026-07-19', 'lunch', 10,   'Fish tacos',                          'From freshly bought catch',      10),
+(2, '2026-07-21', 'lunch', 6,    'One-pot lentil soup',                 NULL,                              6),
+(2, '2026-07-22', 'lunch', 7,    'Tomato bruschetta',                   'Quick and tasty',                 7)
 ON CONFLICT DO NOTHING;
 
 -- CARS

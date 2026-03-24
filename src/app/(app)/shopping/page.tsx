@@ -1,9 +1,22 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { Plus, Trash2, Pencil, ShoppingCart, Check } from 'lucide-react';
-import { Modal } from '@/components/Modal';
-import { Avatar } from '@/components/Avatar';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Plus, Trash2, Pencil, ShoppingCart, Check, ChevronDown, Package, CheckCircle2, ListTodo } from 'lucide-react';
+import { Modal } from '@/components/shared/modal';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { cn, getInitials, avatarColorClass } from '@/lib/utils';
 import { useI18n } from '@/lib/i18n/context';
 import { formatCurrency } from '@/lib/currencies';
 
@@ -45,22 +58,19 @@ interface CrewUser {
 }
 
 const CATEGORIES = [
-  { value: 'groceries', label: 'Groceries' },
-  { value: 'drinks', label: 'Drinks' },
-  { value: 'alcohol', label: 'Alcohol' },
-  { value: 'hygiene', label: 'Hygiene' },
-  { value: 'medicine', label: 'Medicine' },
-  { value: 'other', label: 'Other' },
+  { value: 'groceries' },
+  { value: 'fresh' },
+  { value: 'drinks' },
+  { value: 'alcohol' },
+  { value: 'snacks' },
+  { value: 'bbq' },
+  { value: 'ice' },
+  { value: 'hygiene' },
+  { value: 'medicine' },
+  { value: 'cleaning' },
+  { value: 'boat_supplies' },
+  { value: 'other' },
 ];
-
-const CATEGORY_LABELS: Record<string, string> = {
-  groceries: 'Groceries',
-  drinks: 'Drinks',
-  alcohol: 'Alcohol',
-  hygiene: 'Hygiene',
-  medicine: 'Medicine',
-  other: 'Other',
-};
 
 async function apiCall(url: string, method = 'GET', data?: any) {
   const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
@@ -73,6 +83,31 @@ async function apiCall(url: string, method = 'GET', data?: any) {
   return res.json();
 }
 
+const listVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: { staggerChildren: 0.04 },
+  },
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 8 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { type: 'spring' as const, damping: 20, stiffness: 300 },
+  },
+  exit: {
+    opacity: 0,
+    x: -20,
+    transition: { duration: 0.2 },
+  },
+};
+
+const selectClassName =
+  'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring';
+
 export default function ShoppingPage() {
   const { t } = useI18n();
   const [boats, setBoats] = useState<Boat[]>([]);
@@ -81,6 +116,9 @@ export default function ShoppingPage() {
   const [summary, setSummary] = useState<Summary>({ total_items: 0, bought_items: 0, totals: {} });
   const [users, setUsers] = useState<CrewUser[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Category filter
+  const [activeCategory, setActiveCategory] = useState<string>('all');
 
   // Modal state
   const [modalOpen, setModalOpen] = useState(false);
@@ -110,8 +148,6 @@ export default function ShoppingPage() {
           }
           userList.push({ id: u.id, name: u.name, boat_id: u.boat_id });
         }
-        // Build boat list from user data - users endpoint returns boat_name
-        // We need boat ids - extract from user data
         const boatList: Boat[] = [];
         for (const [id, name] of boatMap) {
           boatList.push({ id, name });
@@ -211,41 +247,54 @@ export default function ShoppingPage() {
     loadItems();
   }
 
-  // Group items by category
-  const grouped = items.reduce<Record<string, ShoppingItem[]>>((acc, item) => {
-    const cat = item.category || 'other';
-    if (!acc[cat]) acc[cat] = [];
-    acc[cat].push(item);
-    return acc;
-  }, {});
+  // Filtered items based on active category
+  const filteredItems = useMemo(() => {
+    if (activeCategory === 'all') return items;
+    return items.filter(item => item.category === activeCategory);
+  }, [items, activeCategory]);
+
+  // Group filtered items: unbought first, then bought
+  const sortedItems = useMemo(() => {
+    const unbought = filteredItems.filter(i => !i.is_bought);
+    const bought = filteredItems.filter(i => i.is_bought);
+    return [...unbought, ...bought];
+  }, [filteredItems]);
 
   const boatUsers = users.filter(u => u.boat_id === activeBoat);
+  const remaining = summary.total_items - summary.bought_items;
 
-  const summaryParts: string[] = [
-    `${summary.total_items} items`,
-    `${summary.bought_items} purchased`,
-  ];
-  for (const [cur, total] of Object.entries(summary.totals)) {
-    summaryParts.push(formatCurrency(total, cur));
-  }
+  // Unique categories present in the current item list (for filter pills)
+  const presentCategories = useMemo(() => {
+    const cats = new Set(items.map(i => i.category || 'other'));
+    return CATEGORIES.filter(c => cats.has(c.value));
+  }, [items]);
 
   return (
     <>
-      <div className="page-header">
-        <h1 className="page-title">
-          <ShoppingCart size={24} style={{ marginRight: 8, verticalAlign: 'middle' }} />
-          Shopping
+      {/* Page header */}
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+          <ShoppingCart size={24} />
+          {t('shopping.title')}
         </h1>
+        <p className="text-sm text-muted-foreground mt-1">
+          {t('shopping.subtitle')}
+        </p>
       </div>
 
       {/* Boat tabs */}
       {boats.length > 0 && (
-        <div className="tab-nav" style={{ marginBottom: 16 }}>
+        <div className="flex gap-1 mb-4 rounded-lg border border-border p-1 bg-muted/50">
           {boats.map(boat => (
             <button
               key={boat.id}
-              className={`tab-btn ${activeBoat === boat.id ? 'active' : ''}`}
               onClick={() => setActiveBoat(boat.id)}
+              className={cn(
+                'flex-1 px-3 py-1.5 text-sm font-medium rounded-md transition-colors cursor-pointer border-none',
+                activeBoat === boat.id
+                  ? 'bg-background shadow-sm text-foreground'
+                  : 'text-muted-foreground hover:text-foreground bg-transparent',
+              )}
             >
               {boat.name}
             </button>
@@ -253,150 +302,216 @@ export default function ShoppingPage() {
         </div>
       )}
 
-      {/* Summary bar */}
-      {items.length > 0 && (
-        <div
-          className="card"
-          style={{ marginBottom: 16 }}
-        >
-          <div className="card-body" style={{ padding: '12px 16px', fontSize: '0.85rem', color: 'var(--color-text-secondary)' }}>
-            {summaryParts.join(' \u00b7 ')}
-          </div>
+      {/* Summary stats row */}
+      {!loading && items.length > 0 && (
+        <div className="grid grid-cols-3 gap-2 mb-4">
+          <Card className="py-0">
+            <CardContent className="px-3 py-2.5 text-center">
+              <div className="text-lg font-bold text-primary">{summary.total_items}</div>
+              <div className="text-[0.7rem] text-muted-foreground uppercase">{t('shopping.totalItems')}</div>
+            </CardContent>
+          </Card>
+          <Card className="py-0">
+            <CardContent className="px-3 py-2.5 text-center">
+              <div className="text-lg font-bold text-green-600">{summary.bought_items}</div>
+              <div className="text-[0.7rem] text-muted-foreground uppercase">{t('shopping.bought')}</div>
+            </CardContent>
+          </Card>
+          <Card className="py-0">
+            <CardContent className="px-3 py-2.5 text-center">
+              <div className="text-lg font-bold">{remaining}</div>
+              <div className="text-[0.7rem] text-muted-foreground uppercase">{t('common.remaining')}</div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Category filter pills */}
+      {!loading && items.length > 0 && presentCategories.length > 1 && (
+        <div className="flex gap-1.5 flex-wrap mb-4">
+          <button
+            onClick={() => setActiveCategory('all')}
+            className={cn(
+              'px-3 py-1 text-xs font-medium rounded-full transition-colors cursor-pointer border-none',
+              activeCategory === 'all'
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
+            )}
+          >
+            {t('common.all')}
+          </button>
+          {presentCategories.map(cat => (
+            <button
+              key={cat.value}
+              onClick={() => setActiveCategory(cat.value)}
+              className={cn(
+                'px-3 py-1 text-xs font-medium rounded-full transition-colors cursor-pointer border-none',
+                activeCategory === cat.value
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
+              )}
+            >
+              {t(`shopping.categories.${cat.value}`)}
+            </button>
+          ))}
         </div>
       )}
 
       {/* Loading */}
       {loading && (
-        <div style={{ textAlign: 'center', padding: 40, color: 'var(--color-text-secondary)' }}>
-          Loading...
+        <div className="text-center py-10 text-muted-foreground">
+          {t('common.loading')}
         </div>
       )}
 
       {/* Empty state */}
       {!loading && items.length === 0 && (
-        <div style={{ textAlign: 'center', padding: 40, color: 'var(--color-text-secondary)' }}>
-          <ShoppingCart size={48} style={{ opacity: 0.3, marginBottom: 12 }} />
-          <p>No shopping items yet</p>
-          <button className="btn btn-primary" style={{ marginTop: 12 }} onClick={openAddModal}>
-            Add first item
-          </button>
+        <div className="text-center py-10 text-muted-foreground">
+          <ShoppingCart size={48} className="mx-auto mb-3 opacity-30" />
+          <p>{t('shopping.noItems')}</p>
+          <Button className="mt-3" onClick={openAddModal}>
+            {t('shopping.addFirstItem')}
+          </Button>
         </div>
       )}
 
-      {/* Items grouped by category */}
-      {!loading && Object.keys(grouped).map(category => (
-        <div key={category} style={{ marginBottom: 20 }}>
-          <h3 style={{
-            fontSize: '0.8rem',
-            fontWeight: 600,
-            textTransform: 'uppercase',
-            letterSpacing: '0.05em',
-            color: 'var(--color-text-tertiary)',
-            marginBottom: 8,
-            paddingLeft: 4,
-          }}>
-            {CATEGORY_LABELS[category] || category}
-          </h3>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {grouped[category].map(item => (
-              <div
+      {/* Item list */}
+      {!loading && sortedItems.length > 0 && (
+        <motion.div
+          className="flex flex-col gap-1.5"
+          variants={listVariants}
+          initial="hidden"
+          animate="visible"
+        >
+          <AnimatePresence mode="popLayout">
+            {sortedItems.map(item => (
+              <motion.div
                 key={item.id}
-                className="card"
-                style={{
-                  opacity: item.is_bought ? 0.6 : 1,
-                  transition: 'opacity 0.2s',
-                }}
+                variants={itemVariants}
+                exit="exit"
+                layout
               >
-                <div className="card-body" style={{
-                  padding: '12px 16px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 12,
-                }}>
-                  {/* Checkbox */}
-                  <button
-                    onClick={() => handleToggleBought(item)}
-                    style={{
-                      width: 28,
-                      height: 28,
-                      minWidth: 28,
-                      borderRadius: 8,
-                      border: item.is_bought
-                        ? '2px solid var(--color-success)'
-                        : '2px solid var(--color-border)',
-                      background: item.is_bought ? 'var(--color-success)' : 'transparent',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexShrink: 0,
-                    }}
-                    aria-label={item.is_bought ? 'Mark as not bought' : 'Mark as bought'}
-                  >
-                    {item.is_bought && <Check size={16} color="white" />}
-                  </button>
-
-                  {/* Item details */}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{
-                      fontWeight: 600,
-                      textDecoration: item.is_bought ? 'line-through' : 'none',
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                    }}>
-                      {item.item_name}
-                      {item.quantity && (
-                        <span style={{ fontWeight: 400, color: 'var(--color-text-secondary)', marginLeft: 6 }}>
-                          x{item.quantity}
-                        </span>
-                      )}
-                    </div>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 2 }}>
-                      {item.price && (
-                        <span>{formatCurrency(parseFloat(item.price), item.currency)}</span>
-                      )}
-                      {item.assigned_to_name && (
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                          <Avatar name={item.assigned_to_name} avatar={item.assigned_to_avatar} size="sm" userId={item.assigned_to || 1} />
-                          {item.assigned_to_name}
-                        </span>
-                      )}
-                      {item.is_bought && item.bought_by_name && (
-                        <span style={{ color: 'var(--color-success)' }}>
-                          Bought by {item.bought_by_name}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Actions */}
-                  <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                <Card className={cn(
+                  'transition-opacity duration-200 py-0',
+                  item.is_bought && 'opacity-60',
+                )}>
+                  <CardContent className="flex items-center gap-3.5 px-4 py-3">
+                    {/* Checkbox */}
                     <button
-                      className="btn btn-sm btn-outline"
-                      onClick={() => openEditModal(item)}
-                      aria-label="Edit"
+                      onClick={() => handleToggleBought(item)}
+                      className={cn(
+                        'w-7 h-7 rounded-lg border-2 flex items-center justify-center shrink-0 transition-colors cursor-pointer',
+                        item.is_bought
+                          ? 'border-success bg-success'
+                          : 'border-border bg-transparent',
+                      )}
+                      aria-label={item.is_bought ? 'Mark as not bought' : 'Mark as bought'}
                     >
-                      <Pencil size={14} />
+                      {item.is_bought && <Check size={16} className="text-white" />}
                     </button>
-                    <button
-                      className="btn btn-sm btn-danger"
-                      onClick={() => setDeleteConfirm(item.id)}
-                      aria-label="Delete"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                </div>
-              </div>
+
+                    {/* Item details */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className={cn(
+                          'font-semibold text-sm truncate',
+                          item.is_bought && 'line-through',
+                        )}>
+                          {item.item_name}
+                        </span>
+                        {item.quantity && (
+                          <Badge variant="secondary" className="text-[0.65rem] px-1.5 py-0 shrink-0">
+                            x{item.quantity}
+                          </Badge>
+                        )}
+                        <Badge variant="outline" className="text-[0.65rem] px-1.5 py-0 shrink-0">
+                          {t(`shopping.categories.${item.category}`) || item.category}
+                        </Badge>
+                      </div>
+                      <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap mt-0.5">
+                        {item.price && (
+                          <span className="font-medium">
+                            {formatCurrency(parseFloat(item.price), item.currency)}
+                          </span>
+                        )}
+                        {item.assigned_to_name && (
+                          <span className="inline-flex items-center gap-1">
+                            <Avatar className={cn('w-4 h-4 text-[8px]', avatarColorClass(item.assigned_to || 1))}>
+                              {item.assigned_to_avatar && (
+                                <AvatarImage src={item.assigned_to_avatar} alt={item.assigned_to_name} />
+                              )}
+                              <AvatarFallback className="text-[8px]">
+                                {getInitials(item.assigned_to_name)}
+                              </AvatarFallback>
+                            </Avatar>
+                            {item.assigned_to_name}
+                          </span>
+                        )}
+                        {item.is_bought && item.bought_by_name && (
+                          <span className="text-success">
+                            {t('shopping.boughtBy', { name: item.bought_by_name })}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Actions dropdown */}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="icon-xs"
+                          onClick={(e) => e.stopPropagation()}
+                          aria-label="Actions"
+                        >
+                          <ChevronDown size={14} />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openEditModal(item);
+                          }}
+                        >
+                          <Pencil size={14} />
+                          {t('common.edit')}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="text-destructive focus:text-destructive"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteConfirm(item.id);
+                          }}
+                        >
+                          <Trash2 size={14} />
+                          {t('common.delete')}
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </CardContent>
+                </Card>
+              </motion.div>
             ))}
-          </div>
+          </AnimatePresence>
+        </motion.div>
+      )}
+
+      {/* Filtered empty state */}
+      {!loading && items.length > 0 && sortedItems.length === 0 && (
+        <div className="text-center py-10 text-muted-foreground">
+          <Package size={48} className="mx-auto mb-3 opacity-30" />
+          <p>{t('shopping.noItemsInCategory')}</p>
         </div>
-      ))}
+      )}
 
       {/* FAB */}
       {!loading && activeBoat > 0 && (
-        <button className="fab" onClick={openAddModal} aria-label="Add item">
+        <button
+          onClick={openAddModal}
+          aria-label="Add item"
+          className="fixed bottom-24 right-5 md:bottom-8 z-40 w-12 h-12 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center hover:scale-105 active:scale-95 transition-transform border-none cursor-pointer"
+        >
           <Plus size={24} />
         </button>
       )}
@@ -405,59 +520,66 @@ export default function ShoppingPage() {
       <Modal
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
-        title={editingItem ? 'Edit Item' : 'Add Item'}
+        title={editingItem ? t('shopping.editItem') : t('shopping.addItem')}
         footer={
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <button className="btn btn-outline" onClick={() => setModalOpen(false)}>Cancel</button>
-            <button className="btn btn-primary" onClick={handleSave} disabled={saving || !formName.trim()}>
-              {saving ? 'Saving...' : (editingItem ? 'Update' : 'Add')}
-            </button>
+          <div className="flex gap-2 justify-end">
+            <Button variant="outline" onClick={() => setModalOpen(false)}>
+              {t('common.cancel')}
+            </Button>
+            <Button onClick={handleSave} disabled={saving || !formName.trim()}>
+              {saving ? t('common.saving') : (editingItem ? t('common.update') : t('common.add'))}
+            </Button>
           </div>
         }
       >
-        <div className="form-group">
-          <label className="form-label">Item name *</label>
-          <input
-            className="form-control"
+        <div className="space-y-2 mb-4">
+          <Label>{t('shopping.itemName')} *</Label>
+          <Input
             value={formName}
             onChange={e => setFormName(e.target.value)}
             placeholder="e.g. Sunscreen"
             autoFocus
           />
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          <div className="form-group">
-            <label className="form-label">Quantity</label>
-            <input
-              className="form-control"
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-2 mb-4">
+            <Label>{t('shopping.quantity')}</Label>
+            <Input
               value={formQuantity}
               onChange={e => setFormQuantity(e.target.value)}
               placeholder="e.g. 2"
             />
           </div>
-          <div className="form-group">
-            <label className="form-label">Category</label>
-            <select className="form-control" value={formCategory} onChange={e => setFormCategory(e.target.value)}>
+          <div className="space-y-2 mb-4">
+            <Label>{t('wallet.category')}</Label>
+            <select
+              className={selectClassName}
+              value={formCategory}
+              onChange={e => setFormCategory(e.target.value)}
+            >
               {CATEGORIES.map(c => (
-                <option key={c.value} value={c.value}>{c.label}</option>
+                <option key={c.value} value={c.value}>{t(`shopping.categories.${c.value}`)}</option>
               ))}
             </select>
           </div>
         </div>
-        <div className="form-group">
-          <label className="form-label">Assigned to</label>
-          <select className="form-control" value={formAssignedTo} onChange={e => setFormAssignedTo(e.target.value)}>
-            <option value="">-- Anyone --</option>
+        <div className="space-y-2 mb-4">
+          <Label>{t('shopping.assignTo')}</Label>
+          <select
+            className={selectClassName}
+            value={formAssignedTo}
+            onChange={e => setFormAssignedTo(e.target.value)}
+          >
+            <option value="">{t('shopping.anyone')}</option>
             {boatUsers.map(u => (
               <option key={u.id} value={u.id}>{u.name}</option>
             ))}
           </select>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px', gap: 12 }}>
-          <div className="form-group">
-            <label className="form-label">Price</label>
-            <input
-              className="form-control"
+        <div className="grid grid-cols-[1fr_100px] gap-3">
+          <div className="space-y-2 mb-4">
+            <Label>{t('shopping.price')}</Label>
+            <Input
               type="number"
               step="0.01"
               min="0"
@@ -466,23 +588,33 @@ export default function ShoppingPage() {
               placeholder="0.00"
             />
           </div>
-          <div className="form-group">
-            <label className="form-label">Currency</label>
-            <select className="form-control" value={formCurrency} onChange={e => setFormCurrency(e.target.value)}>
-              <option value="EUR">EUR</option>
-              <option value="CZK">CZK</option>
-              <option value="USD">USD</option>
-              <option value="GBP">GBP</option>
+          <div className="space-y-2 mb-4">
+            <Label>{t('wallet.currency')}</Label>
+            <select
+              className={selectClassName}
+              value={formCurrency}
+              onChange={e => setFormCurrency(e.target.value)}
+            >
+              {(() => {
+                let codes = ['EUR', 'CZK', 'USD', 'GBP'];
+                if (typeof document !== 'undefined') {
+                  try {
+                    const m = document.querySelector('meta[name="allowed-currencies"]');
+                    const a = m ? JSON.parse(m.getAttribute('content') || '[]') : [];
+                    if (a.length > 0) codes = a;
+                  } catch { /* */ }
+                }
+                return codes.map((c: string) => <option key={c} value={c}>{c}</option>);
+              })()}
             </select>
           </div>
         </div>
-        <div className="form-group">
-          <label className="form-label">Note</label>
-          <input
-            className="form-control"
+        <div className="space-y-2 mb-4">
+          <Label>{t('shopping.note')}</Label>
+          <Input
             value={formNote}
             onChange={e => setFormNote(e.target.value)}
-            placeholder="Optional note"
+            placeholder={t('menu.optionalNote')}
           />
         </div>
       </Modal>
@@ -491,16 +623,25 @@ export default function ShoppingPage() {
       <Modal
         isOpen={deleteConfirm !== null}
         onClose={() => setDeleteConfirm(null)}
-        title="Delete Item"
+        title={t('shopping.deleteItem')}
         size="sm"
         footer={
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <button className="btn btn-outline" onClick={() => setDeleteConfirm(null)}>Cancel</button>
-            <button className="btn btn-danger" onClick={() => deleteConfirm && handleDelete(deleteConfirm)}>Delete</button>
+          <div className="flex gap-2 justify-end">
+            <Button variant="outline" onClick={() => setDeleteConfirm(null)}>
+              {t('common.cancel')}
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => deleteConfirm && handleDelete(deleteConfirm)}
+            >
+              {t('common.delete')}
+            </Button>
           </div>
         }
       >
-        <p>Are you sure you want to delete this item? This cannot be undone.</p>
+        <p className="text-sm text-muted-foreground">
+          {t('shopping.confirmDelete')}
+        </p>
       </Modal>
     </>
   );

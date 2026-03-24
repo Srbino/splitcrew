@@ -6,6 +6,7 @@ export interface SessionData {
   userId?: number;
   userName?: string;
   boatId?: number;
+  role?: 'crew' | 'captain';
   isAdmin?: boolean;
   lastActivity?: number;
   // Rate limiting

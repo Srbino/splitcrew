@@ -2,7 +2,7 @@ import { getSession, requireCsrf } from '@/lib/auth';
 import { query, queryOne, execute, getSetting, getAllUsers, pool } from '@/lib/db';
 import { apiSuccess, apiError } from '@/lib/utils';
 import { convertToBase } from '@/lib/currencies';
-import { getExchangeRate, getExchangeRates } from '@/lib/exchange';
+import { getExchangeRate, getExchangeRates, getExchangeRateForDate, syncRatesForRange } from '@/lib/exchange';
 
 // ── Types ──
 
@@ -83,6 +83,10 @@ export async function GET(request: Request) {
         return handleAudit(searchParams);
       case 'rate':
         return handleRate();
+      case 'sync_rates':
+        return handleSyncRates();
+      case 'full_audit':
+        return handleFullAudit();
       default:
         return apiError('Unknown action');
     }
@@ -106,10 +110,12 @@ async function handleList(
   if (filter === 'mine') {
     params.push(userId);
     whereClause = `WHERE e.paid_by = $${params.length}`;
-  } else if (filter === 'boat1') {
-    whereClause = `WHERE e.split_type IN ('both', 'boat1')`;
-  } else if (filter === 'boat2') {
-    whereClause = `WHERE e.split_type IN ('both', 'boat2')`;
+  } else if (filter.startsWith('boat_')) {
+    // Dynamic boat filter: boat_1, boat_2, boat_3, etc.
+    // Handles both new format (split_type='1') and legacy format (split_type='boat1')
+    const boatId = filter.replace('boat_', '');
+    params.push(boatId, `boat${boatId}`);
+    whereClause = `WHERE (e.split_type = 'both' OR e.split_type = $${params.length - 1} OR e.split_type = $${params.length})`;
   }
 
   const expenses = await query<ExpenseRow>(
@@ -369,6 +375,48 @@ async function handleRate() {
   return apiSuccess({ base_currency: baseCurrency, rates });
 }
 
+/**
+ * Sync exchange rates for the trip date range (and a buffer around it).
+ * Fetches historical rates from Frankfurter API and stores per-day.
+ */
+async function handleSyncRates() {
+  const baseCurrency = await getSetting('base_currency', 'EUR');
+  const tripFrom = await getSetting('trip_date_from', '');
+  const tripTo = await getSetting('trip_date_to', '');
+
+  // Determine date range: trip period ± 7 days buffer, or last 30 days if no trip dates
+  let fromDate: string;
+  let toDate: string;
+
+  if (tripFrom && tripTo) {
+    const from = new Date(tripFrom);
+    from.setDate(from.getDate() - 7);
+    const to = new Date(tripTo);
+    to.setDate(to.getDate() + 7);
+    // Cap toDate at today (can't fetch future rates)
+    const today = new Date();
+    if (to > today) to.setTime(today.getTime());
+    fromDate = from.toISOString().slice(0, 10);
+    toDate = to.toISOString().slice(0, 10);
+  } else {
+    // No trip dates — sync last 30 days
+    const to = new Date();
+    const from = new Date();
+    from.setDate(from.getDate() - 30);
+    fromDate = from.toISOString().slice(0, 10);
+    toDate = to.toISOString().slice(0, 10);
+  }
+
+  const result = await syncRatesForRange(baseCurrency, fromDate, toDate);
+
+  return apiSuccess({
+    base_currency: baseCurrency,
+    from_date: fromDate,
+    to_date: toDate,
+    ...result,
+  });
+}
+
 // ── POST ──
 
 export async function POST(request: Request) {
@@ -384,7 +432,8 @@ export async function POST(request: Request) {
 
     const body = await request.json();
     const action = body.action;
-    const userId = session.userId || 0;
+    // Admin has no userId — use null for FK-safe DB operations
+    const userId = session.userId || null;
 
     switch (action) {
       case 'add':
@@ -393,8 +442,10 @@ export async function POST(request: Request) {
         return handleEdit(body, userId);
       case 'delete':
         return handleDelete(body, userId);
-      case 'settle':
-        return handleSettle(body, userId);
+      case 'settle': {
+        const role = session.isAdmin ? 'admin' : (session.role || 'crew');
+        return handleSettle(body, userId, role);
+      }
       default:
         return apiError('Unknown action');
     }
@@ -415,7 +466,7 @@ async function handleAdd(
     split_type: string;
     split_users: number[];
   },
-  createdBy: number
+  createdBy: number | null
 ) {
   const {
     paid_by,
@@ -446,11 +497,15 @@ async function handleAdd(
   let amountBase = amount;
   let exchangeRate: number | null = null;
 
-  // Currency conversion
+  // Parse the date first — we need it for date-specific exchange rate lookup
+  const parsedDate = parseExpenseDate(expense_date);
+  const expenseDateStr = parsedDate.slice(0, 10);
+
+  // Currency conversion — use the rate for the expense date
   if (currency !== baseCurrency) {
-    const rate = await getExchangeRate(baseCurrency, currency);
+    const rate = await getExchangeRateForDate(baseCurrency, currency, expenseDateStr);
     if (rate <= 0) {
-      return apiError(`Could not get exchange rate for ${currency}`);
+      return apiError(`Could not get exchange rate for ${currency} on ${expenseDateStr}`);
     }
     exchangeRate = rate;
     amountBase = convertToBase(amount, rate);
@@ -465,9 +520,6 @@ async function handleAdd(
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-
-    // Parse the date
-    const parsedDate = parseExpenseDate(expense_date);
 
     // Insert expense
     const expenseResult = await client.query(
@@ -544,7 +596,7 @@ async function handleEdit(
     split_type: string;
     split_users: number[];
   },
-  changedBy: number
+  changedBy: number | null
 ) {
   const {
     id,
@@ -585,18 +637,29 @@ async function handleEdit(
   let amountBase = amount;
   let exchangeRate: number | null = null;
 
-  // Currency conversion — reuse original rate for same non-base currency
+  // Parse expense date for rate lookup
+  const parsedDate = parseExpenseDate(expense_date);
+  const expenseDateStr = parsedDate.slice(0, 10);
+
+  // Currency conversion — use the rate for the expense date
+  // If same currency and same date, reuse original rate for consistency
   if (currency !== baseCurrency) {
+    const origDate = existing.expense_date
+      ? new Date(existing.expense_date).toISOString().slice(0, 10)
+      : '';
+
     if (
       currency === existing.currency &&
+      expenseDateStr === origDate &&
       existing.exchange_rate
     ) {
-      // Reuse original exchange rate
+      // Same currency + same date → reuse original rate for consistency
       exchangeRate = parseFloat(existing.exchange_rate);
     } else {
-      const rate = await getExchangeRate(baseCurrency, currency);
+      // Different currency or different date → fetch the rate for the new date
+      const rate = await getExchangeRateForDate(baseCurrency, currency, expenseDateStr);
       if (rate <= 0) {
-        return apiError(`Could not get exchange rate for ${currency}`);
+        return apiError(`Could not get exchange rate for ${currency} on ${expenseDateStr}`);
       }
       exchangeRate = rate;
     }
@@ -701,7 +764,7 @@ async function handleEdit(
 
 async function handleDelete(
   body: { id: number },
-  deletedBy: number
+  deletedBy: number | null
 ) {
   const { id } = body;
   if (!id) return apiError('Missing expense ID');
@@ -747,7 +810,8 @@ async function handleDelete(
 
 async function handleSettle(
   body: { from_user_id: number; to_user_id: number; settled: boolean },
-  settledBy: number
+  settledBy: number | null,
+  performerRole?: string
 ) {
   const { from_user_id, to_user_id, settled } = body;
 
@@ -755,24 +819,82 @@ async function handleSettle(
     return apiError('Missing user IDs');
   }
 
-  if (settled) {
-    // Mark as settled (upsert)
-    await execute(
-      `INSERT INTO wallet_settled (from_user_id, to_user_id, settled_by)
-       VALUES ($1, $2, $3)
-       ON CONFLICT (from_user_id, to_user_id) DO UPDATE SET
-         settled_at = CURRENT_TIMESTAMP, settled_by = EXCLUDED.settled_by`,
-      [from_user_id, to_user_id, settledBy]
-    );
-  } else {
-    // Unmark
-    await execute(
-      'DELETE FROM wallet_settled WHERE from_user_id = $1 AND to_user_id = $2',
-      [from_user_id, to_user_id]
-    );
+  // Permission check: admin can settle anything; captain can settle for their boat;
+  // crew member can only settle if they are one of the two parties
+  if (performerRole !== 'admin') {
+    const isParty = settledBy === from_user_id || settledBy === to_user_id;
+    if (!isParty && performerRole !== 'captain') {
+      return apiError('You can only settle your own debts.');
+    }
   }
 
-  return apiSuccess({ settled });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    if (settled) {
+      await client.query(
+        `INSERT INTO wallet_settled (from_user_id, to_user_id, settled_by)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (from_user_id, to_user_id) DO UPDATE SET
+           settled_at = CURRENT_TIMESTAMP, settled_by = EXCLUDED.settled_by`,
+        [from_user_id, to_user_id, settledBy]
+      );
+    } else {
+      await client.query(
+        'DELETE FROM wallet_settled WHERE from_user_id = $1 AND to_user_id = $2',
+        [from_user_id, to_user_id]
+      );
+    }
+
+    // Audit trail
+    await client.query(
+      `INSERT INTO settlement_audit_log (from_user_id, to_user_id, action, performed_by, performer_role)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [from_user_id, to_user_id, settled ? 'settled' : 'unsettled', settledBy, performerRole || null]
+    );
+
+    await client.query('COMMIT');
+    return apiSuccess({ settled });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/** Full audit log — expenses + settlements (for admin) */
+async function handleFullAudit() {
+  const expenseAudits = await query<{
+    id: number; expense_id: number; changed_by_name: string | null;
+    change_type: string; changed_at: string; description: string | null;
+  }>(
+    `SELECT wal.id, wal.expense_id, u.name as changed_by_name,
+            wal.change_type, wal.changed_at,
+            we.description
+     FROM wallet_audit_log wal
+     LEFT JOIN users u ON wal.changed_by = u.id
+     LEFT JOIN wallet_expenses we ON wal.expense_id = we.id
+     ORDER BY wal.changed_at DESC LIMIT 50`
+  );
+
+  const settlementAudits = await query<{
+    id: number; from_name: string; to_name: string;
+    action: string; performer_name: string | null;
+    performer_role: string | null; created_at: string;
+  }>(
+    `SELECT sal.id, uf.name as from_name, ut.name as to_name,
+            sal.action, up.name as performer_name,
+            sal.performer_role, sal.created_at
+     FROM settlement_audit_log sal
+     LEFT JOIN users uf ON sal.from_user_id = uf.id
+     LEFT JOIN users ut ON sal.to_user_id = ut.id
+     LEFT JOIN users up ON sal.performed_by = up.id
+     ORDER BY sal.created_at DESC LIMIT 50`
+  );
+
+  return apiSuccess({ expense_audits: expenseAudits, settlement_audits: settlementAudits });
 }
 
 // ── Helpers ──

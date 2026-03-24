@@ -1,10 +1,27 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Trash2, Pencil, Navigation, Anchor, ArrowRight } from 'lucide-react';
-import { Modal } from '@/components/Modal';
-import { Avatar } from '@/components/Avatar';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  Plus, Trash2, Pencil, Navigation, Anchor, ArrowRight,
+  BookOpen, BarChart3, Trophy, MoreVertical,
+} from 'lucide-react';
+import { Modal } from '@/components/shared/modal';
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { cn, getInitials, avatarColorClass } from '@/lib/utils';
 import { useI18n } from '@/lib/i18n/context';
+
+// ── Types ──
 
 interface LogbookEntry {
   id: number;
@@ -39,6 +56,8 @@ interface CrewUser {
   boat_id: number;
 }
 
+// ── Helpers ──
+
 async function apiCall(url: string, method = 'GET', data?: any) {
   const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
   const options: RequestInit = {
@@ -57,9 +76,43 @@ function formatDateDisplay(dateStr: string): string {
 
 function formatTime(time: string | null): string {
   if (!time) return '';
-  // time comes as HH:MM:SS or HH:MM
   return time.substring(0, 5);
 }
+
+// ── Animations ──
+
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: { staggerChildren: 0.05 },
+  },
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 10 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { type: 'spring' as const, damping: 20, stiffness: 300 },
+  },
+  exit: {
+    opacity: 0,
+    y: -10,
+    transition: { duration: 0.15 },
+  },
+};
+
+const statsVariants = {
+  hidden: { opacity: 0, scale: 0.95 },
+  visible: {
+    opacity: 1,
+    scale: 1,
+    transition: { type: 'spring' as const, damping: 20, stiffness: 300 },
+  },
+};
+
+// ── Component ──
 
 export default function LogbookPage() {
   const { t } = useI18n();
@@ -196,231 +249,294 @@ export default function LogbookPage() {
 
   return (
     <>
-      <div className="page-header">
-        <h1 className="page-title">
-          <Navigation size={24} style={{ marginRight: 8, verticalAlign: 'middle' }} />
-          Logbook
+      <div className="mb-4">
+        <h1 className="text-xl font-bold flex items-center gap-2">
+          <Navigation size={24} />
+          {t('logbook.title')}
         </h1>
       </div>
 
       {/* Boat tabs */}
       {boats.length > 0 && (
-        <div className="tab-nav" style={{ marginBottom: 16 }}>
+        <div className="flex gap-1 mb-4 rounded-lg border border-border p-1 bg-muted/50">
           {boats.map(boat => (
-            <button
+            <Button
               key={boat.id}
-              className={`tab-btn ${activeBoat === boat.id ? 'active' : ''}`}
+              variant="ghost"
+              size="sm"
+              className={cn(
+                'flex-1 rounded-md transition-all',
+                activeBoat === boat.id
+                  ? 'bg-background shadow-sm text-foreground'
+                  : 'text-muted-foreground'
+              )}
               onClick={() => setActiveBoat(boat.id)}
             >
               {boat.name}
-            </button>
+            </Button>
           ))}
         </div>
       )}
 
-      {/* Stats bar */}
+      {/* Stats cards */}
       {!loading && entries.length > 0 && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 16 }}>
-          <div className="card">
-            <div className="card-body" style={{ padding: '10px 12px', textAlign: 'center' }}>
-              <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--color-brand)' }}>
-                {stats.total_nm}
-              </div>
-              <div style={{ fontSize: '0.7rem', color: 'var(--color-text-tertiary)', textTransform: 'uppercase' }}>
-                Total NM
-              </div>
-            </div>
-          </div>
-          <div className="card">
-            <div className="card-body" style={{ padding: '10px 12px', textAlign: 'center' }}>
-              <div style={{ fontSize: '1.2rem', fontWeight: 700 }}>
-                {stats.total_days}
-              </div>
-              <div style={{ fontSize: '0.7rem', color: 'var(--color-text-tertiary)', textTransform: 'uppercase' }}>
-                Entries
-              </div>
-            </div>
-          </div>
-          <div className="card">
-            <div className="card-body" style={{ padding: '10px 12px', textAlign: 'center' }}>
-              <div style={{ fontSize: '1.2rem', fontWeight: 700 }}>
-                {stats.max_nm}
-              </div>
-              <div style={{ fontSize: '0.7rem', color: 'var(--color-text-tertiary)', textTransform: 'uppercase' }}>
-                Max NM
-              </div>
-            </div>
-          </div>
-          <div className="card">
-            <div className="card-body" style={{ padding: '10px 12px', textAlign: 'center' }}>
-              <div style={{ fontSize: '1.2rem', fontWeight: 700 }}>
-                {stats.avg_nm}
-              </div>
-              <div style={{ fontSize: '0.7rem', color: 'var(--color-text-tertiary)', textTransform: 'uppercase' }}>
-                Avg NM
-              </div>
-            </div>
-          </div>
-        </div>
+        <motion.div
+          className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4"
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
+        >
+          <motion.div variants={statsVariants}>
+            <Card className="py-0">
+              <CardContent className="px-3 py-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <Navigation size={14} className="text-primary" />
+                  </div>
+                  <span className="text-[11px] text-muted-foreground font-medium uppercase">{t('logbook.totalMiles')}</span>
+                </div>
+                <div className="text-xl font-bold tabular-nums">{stats.total_nm}</div>
+              </CardContent>
+            </Card>
+          </motion.div>
+
+          <motion.div variants={statsVariants}>
+            <Card className="py-0">
+              <CardContent className="px-3 py-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="w-7 h-7 rounded-lg bg-success-subtle flex items-center justify-center">
+                    <BookOpen size={14} className="text-success" />
+                  </div>
+                  <span className="text-[11px] text-muted-foreground font-medium uppercase">{t('logbook.entries')}</span>
+                </div>
+                <div className="text-xl font-bold tabular-nums">{stats.total_days}</div>
+              </CardContent>
+            </Card>
+          </motion.div>
+
+          <motion.div variants={statsVariants}>
+            <Card className="py-0">
+              <CardContent className="px-3 py-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="w-7 h-7 rounded-lg bg-warning-subtle flex items-center justify-center">
+                    <Trophy size={14} className="text-warning" />
+                  </div>
+                  <span className="text-[11px] text-muted-foreground font-medium uppercase">{t('logbook.maxNm')}</span>
+                </div>
+                <div className="text-xl font-bold tabular-nums">{stats.max_nm}</div>
+              </CardContent>
+            </Card>
+          </motion.div>
+
+          <motion.div variants={statsVariants}>
+            <Card className="py-0">
+              <CardContent className="px-3 py-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="w-7 h-7 rounded-lg bg-purple-500/10 flex items-center justify-center">
+                    <BarChart3 size={14} className="text-purple-500" />
+                  </div>
+                  <span className="text-[11px] text-muted-foreground font-medium uppercase">{t('logbook.avgNm')}</span>
+                </div>
+                <div className="text-xl font-bold tabular-nums">{stats.avg_nm}</div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        </motion.div>
       )}
 
       {/* Loading */}
       {loading && (
-        <div style={{ textAlign: 'center', padding: 40, color: 'var(--color-text-secondary)' }}>
-          Loading...
-        </div>
+        <div className="text-center py-10 text-muted-foreground">{t('common.loading')}</div>
       )}
 
       {/* Empty state */}
       {!loading && entries.length === 0 && (
-        <div style={{ textAlign: 'center', padding: 40, color: 'var(--color-text-secondary)' }}>
-          <Anchor size={48} style={{ opacity: 0.3, marginBottom: 12 }} />
-          <p>No logbook entries yet</p>
-          <button className="btn btn-primary" style={{ marginTop: 12 }} onClick={openAddModal}>
-            Add first entry
-          </button>
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
+            <Anchor size={32} className="text-muted-foreground/50" />
+          </div>
+          <h3 className="text-base font-semibold mb-1">{t('logbook.noEntries')}</h3>
+          <p className="text-sm text-muted-foreground mb-4">
+            {t('logbook.startTracking')}
+          </p>
+          <Button onClick={openAddModal}>
+            <Plus size={16} />
+            {t('logbook.addFirstEntry')}
+          </Button>
         </div>
       )}
 
       {/* Entries list */}
-      {!loading && entries.map(entry => {
-        const nm = parseFloat(entry.nautical_miles) || 0;
-        return (
-          <div key={entry.id} className="card" style={{ marginBottom: 8 }}>
-            <div className="card-body" style={{
-              padding: '12px 16px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 12,
-            }}>
-              {/* NM badge */}
-              <div style={{
-                minWidth: 56,
-                textAlign: 'center',
-                flexShrink: 0,
-              }}>
-                <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--color-brand)' }}>
-                  {nm}
-                </div>
-                <div style={{ fontSize: '0.65rem', color: 'var(--color-text-tertiary)', textTransform: 'uppercase' }}>
-                  NM
-                </div>
-              </div>
-
-              {/* Details */}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: 2 }}>
-                  {formatDateDisplay(entry.date.substring(0, 10))}
-                </div>
-                <div style={{ fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
-                  {entry.location_from && (
-                    <span>{entry.location_from}</span>
-                  )}
-                  {entry.location_from && entry.location_to && (
-                    <ArrowRight size={14} style={{ color: 'var(--color-text-tertiary)' }} />
-                  )}
-                  {entry.location_to && (
-                    <span>{entry.location_to}</span>
-                  )}
-                </div>
-                <div style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 2 }}>
-                  {(entry.departure_time || entry.arrival_time) && (
-                    <span>
-                      {formatTime(entry.departure_time)}
-                      {entry.departure_time && entry.arrival_time ? ' - ' : ''}
-                      {formatTime(entry.arrival_time)}
-                    </span>
-                  )}
-                  {entry.skipper_name && (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                      <Avatar name={entry.skipper_name} avatar={entry.skipper_avatar} size="sm" userId={entry.skipper_user_id || 1} />
-                      {entry.skipper_name}
-                    </span>
-                  )}
-                </div>
-                {entry.note && (
-                  <div style={{ fontSize: '0.75rem', color: 'var(--color-text-tertiary)', marginTop: 2 }}>
-                    {entry.note}
-                  </div>
-                )}
-              </div>
-
-              {/* Actions */}
-              <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                <button
-                  className="btn btn-sm btn-outline"
-                  onClick={() => openEditModal(entry)}
-                  aria-label="Edit"
+      {!loading && entries.length > 0 && (
+        <motion.div
+          className="space-y-2"
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
+        >
+          <AnimatePresence mode="popLayout">
+            {entries.map(entry => {
+              const nm = parseFloat(entry.nautical_miles) || 0;
+              return (
+                <motion.div
+                  key={entry.id}
+                  variants={itemVariants}
+                  layout
+                  exit="exit"
                 >
-                  <Pencil size={14} />
-                </button>
-                <button
-                  className="btn btn-sm btn-danger"
-                  onClick={() => setDeleteConfirm(entry.id)}
-                  aria-label="Delete"
-                >
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            </div>
-          </div>
-        );
-      })}
+                  <Card className="py-0">
+                    <CardContent className="px-4 py-3">
+                      <div className="flex items-start gap-3">
+                        {/* NM badge */}
+                        <div className="shrink-0 mt-0.5">
+                          <div className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1">
+                            <span className="text-sm font-bold text-primary tabular-nums">{nm}</span>
+                            <span className="text-[10px] font-semibold text-primary/70 uppercase">{t('logbook.nm')}</span>
+                          </div>
+                        </div>
+
+                        {/* Details */}
+                        <div className="flex-1 min-w-0">
+                          <div className="font-semibold text-sm">
+                            {formatDateDisplay(entry.date.substring(0, 10))}
+                          </div>
+
+                          {(entry.location_from || entry.location_to) && (
+                            <div className="text-sm flex items-center gap-1 flex-wrap mt-0.5">
+                              {entry.location_from && (
+                                <span>{entry.location_from}</span>
+                              )}
+                              {entry.location_from && entry.location_to && (
+                                <ArrowRight size={14} className="text-muted-foreground" />
+                              )}
+                              {entry.location_to && (
+                                <span>{entry.location_to}</span>
+                              )}
+                            </div>
+                          )}
+
+                          <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap mt-1">
+                            {(entry.departure_time || entry.arrival_time) && (
+                              <span>
+                                {formatTime(entry.departure_time)}
+                                {entry.departure_time && entry.arrival_time ? ' - ' : ''}
+                                {formatTime(entry.arrival_time)}
+                              </span>
+                            )}
+                            {entry.skipper_name && (
+                              <span className="inline-flex items-center gap-1">
+                                <Avatar size="sm">
+                                  {entry.skipper_avatar && (
+                                    <AvatarImage src={entry.skipper_avatar} alt={entry.skipper_name} />
+                                  )}
+                                  <AvatarFallback className={avatarColorClass(entry.skipper_user_id || 1)}>
+                                    {getInitials(entry.skipper_name)}
+                                  </AvatarFallback>
+                                </Avatar>
+                                {entry.skipper_name}
+                              </span>
+                            )}
+                          </div>
+
+                          {entry.note && (
+                            <p className="text-xs text-muted-foreground/70 mt-1 line-clamp-1">
+                              {entry.note}
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Actions dropdown */}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              aria-label="Actions"
+                            >
+                              <MoreVertical size={16} />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => openEditModal(entry)}>
+                              <Pencil size={14} />
+                              {t('common.edit')}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              onClick={() => setDeleteConfirm(entry.id)}
+                            >
+                              <Trash2 size={14} />
+                              {t('common.delete')}
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              );
+            })}
+          </AnimatePresence>
+        </motion.div>
+      )}
 
       {/* FAB */}
       {!loading && activeBoat > 0 && (
-        <button className="fab" onClick={openAddModal} aria-label="Add entry">
+        <motion.button
+          className="fixed bottom-24 right-5 md:bottom-8 z-40 w-12 h-12 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center hover:scale-105 active:scale-95 transition-transform border-none cursor-pointer"
+          onClick={openAddModal}
+          aria-label="Add entry"
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.95 }}
+          transition={{ type: 'spring', damping: 15, stiffness: 400 }}
+        >
           <Plus size={24} />
-        </button>
+        </motion.button>
       )}
 
       {/* Add/Edit Modal */}
       <Modal
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
-        title={editingEntry ? 'Edit Entry' : 'Add Entry'}
+        title={editingEntry ? t('logbook.editEntry') : t('logbook.addEntry')}
         footer={
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <button className="btn btn-outline" onClick={() => setModalOpen(false)}>Cancel</button>
-            <button className="btn btn-primary" onClick={handleSave} disabled={saving || !formDate}>
-              {saving ? 'Saving...' : (editingEntry ? 'Update' : 'Add')}
-            </button>
+          <div className="flex gap-2 justify-end">
+            <Button variant="outline" onClick={() => setModalOpen(false)}>{t('common.cancel')}</Button>
+            <Button onClick={handleSave} disabled={saving || !formDate}>
+              {saving ? t('common.saving') : (editingEntry ? t('common.update') : t('common.add'))}
+            </Button>
           </div>
         }
       >
-        <div className="form-group">
-          <label className="form-label">Date *</label>
-          <input
-            className="form-control"
+        <div className="space-y-2 mb-4">
+          <Label>{t('logbook.date')} *</Label>
+          <Input
             type="date"
             value={formDate}
             onChange={e => setFormDate(e.target.value)}
           />
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          <div className="form-group">
-            <label className="form-label">From</label>
-            <input
-              className="form-control"
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-2 mb-4">
+            <Label>{t('logbook.from')}</Label>
+            <Input
               value={formFrom}
               onChange={e => setFormFrom(e.target.value)}
               placeholder="e.g. Split"
             />
           </div>
-          <div className="form-group">
-            <label className="form-label">To</label>
-            <input
-              className="form-control"
+          <div className="space-y-2 mb-4">
+            <Label>{t('logbook.to')}</Label>
+            <Input
               value={formTo}
               onChange={e => setFormTo(e.target.value)}
               placeholder="e.g. Hvar"
             />
           </div>
         </div>
-        <div className="form-group">
-          <label className="form-label">Nautical miles</label>
-          <input
-            className="form-control"
+        <div className="space-y-2 mb-4">
+          <Label>{t('logbook.nauticalMiles')}</Label>
+          <Input
             type="number"
             step="0.1"
             min="0"
@@ -429,42 +545,43 @@ export default function LogbookPage() {
             placeholder="0.0"
           />
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          <div className="form-group">
-            <label className="form-label">Departure time</label>
-            <input
-              className="form-control"
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-2 mb-4">
+            <Label>{t('logbook.departure')}</Label>
+            <Input
               type="time"
               value={formDeparture}
               onChange={e => setFormDeparture(e.target.value)}
             />
           </div>
-          <div className="form-group">
-            <label className="form-label">Arrival time</label>
-            <input
-              className="form-control"
+          <div className="space-y-2 mb-4">
+            <Label>{t('logbook.arrival')}</Label>
+            <Input
               type="time"
               value={formArrival}
               onChange={e => setFormArrival(e.target.value)}
             />
           </div>
         </div>
-        <div className="form-group">
-          <label className="form-label">Skipper</label>
-          <select className="form-control" value={formSkipper} onChange={e => setFormSkipper(e.target.value)}>
-            <option value="">-- No skipper --</option>
+        <div className="space-y-2 mb-4">
+          <Label>{t('logbook.skipper')}</Label>
+          <select
+            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            value={formSkipper}
+            onChange={e => setFormSkipper(e.target.value)}
+          >
+            <option value="">{t('logbook.noSkipper')}</option>
             {boatUsers.map(u => (
               <option key={u.id} value={u.id}>{u.name}</option>
             ))}
           </select>
         </div>
-        <div className="form-group">
-          <label className="form-label">Note</label>
-          <input
-            className="form-control"
+        <div className="space-y-2 mb-4">
+          <Label>{t('logbook.notes')}</Label>
+          <Input
             value={formNote}
             onChange={e => setFormNote(e.target.value)}
-            placeholder="Weather, conditions, etc."
+            placeholder={t('logbook.notePlaceholder')}
           />
         </div>
       </Modal>
@@ -473,16 +590,16 @@ export default function LogbookPage() {
       <Modal
         isOpen={deleteConfirm !== null}
         onClose={() => setDeleteConfirm(null)}
-        title="Delete Entry"
+        title={t('logbook.deleteEntry')}
         size="sm"
         footer={
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <button className="btn btn-outline" onClick={() => setDeleteConfirm(null)}>Cancel</button>
-            <button className="btn btn-danger" onClick={() => deleteConfirm && handleDelete(deleteConfirm)}>Delete</button>
+          <div className="flex gap-2 justify-end">
+            <Button variant="outline" onClick={() => setDeleteConfirm(null)}>{t('common.cancel')}</Button>
+            <Button variant="destructive" onClick={() => deleteConfirm && handleDelete(deleteConfirm)}>{t('common.delete')}</Button>
           </div>
         }
       >
-        <p>Are you sure you want to delete this logbook entry? This cannot be undone.</p>
+        <p>{t('logbook.confirmDelete')}</p>
       </Modal>
     </>
   );
