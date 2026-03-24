@@ -1,0 +1,35 @@
+{
+  "name": "crewsplit",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Self-hosted trip management for sailing crews — expenses, shopping, meals, logbook & more",
+  "scripts": {
+    "dev": "next dev --port 3000",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "db:init": "psql $DATABASE_URL < scripts/schema.sql && psql $DATABASE_URL < scripts/seed.sql"
+  },
+  "keywords": [
+    "sailing",
+    "trip-management",
+    "expense-splitting",
+    "crew",
+    "self-hosted"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^25.5.0",
+    "@types/pg": "^8.20.0",
+    "@types/react": "^19.2.14",
+    "bcryptjs": "^3.0.3",
+    "iron-session": "^8.0.4",
+    "lucide-react": "^1.0.1",
+    "next": "^16.2.1",
+    "pg": "^8.20.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "typescript": "^6.0.2"
+  }
+}
