@@ -65,7 +65,7 @@ interface SettledRow {
 export async function GET(request: Request) {
   try {
     const session = await getSession();
-    if (!session.userId) {
+    if (!session.userId && !session.isAdmin) {
       return apiError('Unauthorized', 401);
     }
 
@@ -74,7 +74,7 @@ export async function GET(request: Request) {
 
     switch (action) {
       case 'list':
-        return handleList(searchParams, session.userId, session.boatId || 0);
+        return handleList(searchParams, session.userId || 0, session.boatId || 0);
       case 'balances':
         return handleBalances();
       case 'settlements':
@@ -374,7 +374,7 @@ async function handleRate() {
 export async function POST(request: Request) {
   try {
     const session = await getSession();
-    if (!session.userId) {
+    if (!session.userId && !session.isAdmin) {
       return apiError('Unauthorized', 401);
     }
 
@@ -384,16 +384,17 @@ export async function POST(request: Request) {
 
     const body = await request.json();
     const action = body.action;
+    const userId = session.userId || 0;
 
     switch (action) {
       case 'add':
-        return handleAdd(body, session.userId);
+        return handleAdd(body, userId);
       case 'edit':
-        return handleEdit(body, session.userId);
+        return handleEdit(body, userId);
       case 'delete':
-        return handleDelete(body, session.userId);
+        return handleDelete(body, userId);
       case 'settle':
-        return handleSettle(body, session.userId);
+        return handleSettle(body, userId);
       default:
         return apiError('Unknown action');
     }

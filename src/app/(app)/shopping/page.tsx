@@ -15,12 +15,14 @@ interface ShoppingItem {
   quantity: string | null;
   assigned_to: number | null;
   assigned_to_name: string | null;
+  assigned_to_avatar: string | null;
   price: string | null;
   currency: string;
   note: string | null;
   is_bought: boolean;
   bought_by: number | null;
   bought_by_name: string | null;
+  bought_by_avatar: string | null;
   created_by: number | null;
   created_by_name: string | null;
 }
@@ -356,7 +358,7 @@ export default function ShoppingPage() {
                       )}
                       {item.assigned_to_name && (
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                          <Avatar name={item.assigned_to_name} size="sm" userId={item.assigned_to || 1} />
+                          <Avatar name={item.assigned_to_name} avatar={item.assigned_to_avatar} size="sm" userId={item.assigned_to || 1} />
                           {item.assigned_to_name}
                         </span>
                       )}

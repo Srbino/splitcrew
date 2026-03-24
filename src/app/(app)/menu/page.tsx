@@ -13,6 +13,7 @@ interface MealPlan {
   meal_type: string;
   cook_user_id: number | null;
   cook_name: string | null;
+  cook_avatar: string | null;
   meal_description: string | null;
   note: string | null;
 }
@@ -346,7 +347,7 @@ export default function MenuPage() {
                     )}
                     {meal.cook_name && (
                       <div style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
-                        <Avatar name={meal.cook_name} size="sm" userId={meal.cook_user_id || 1} />
+                        <Avatar name={meal.cook_name} avatar={meal.cook_avatar} size="sm" userId={meal.cook_user_id || 1} />
                         {meal.cook_name}
                       </div>
                     )}

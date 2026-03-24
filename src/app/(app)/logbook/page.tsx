@@ -17,6 +17,7 @@ interface LogbookEntry {
   arrival_time: string | null;
   skipper_user_id: number | null;
   skipper_name: string | null;
+  skipper_avatar: string | null;
   note: string | null;
 }
 
@@ -332,7 +333,7 @@ export default function LogbookPage() {
                   )}
                   {entry.skipper_name && (
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                      <Avatar name={entry.skipper_name} size="sm" userId={entry.skipper_user_id || 1} />
+                      <Avatar name={entry.skipper_name} avatar={entry.skipper_avatar} size="sm" userId={entry.skipper_user_id || 1} />
                       {entry.skipper_name}
                     </span>
                   )}

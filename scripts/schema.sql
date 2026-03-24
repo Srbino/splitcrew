@@ -20,7 +20,8 @@ CREATE TABLE IF NOT EXISTS users (
     phone   VARCHAR(50)  DEFAULT NULL,
     email   VARCHAR(150) DEFAULT NULL,
     avatar  VARCHAR(200) DEFAULT NULL,
-    boat_id INT          NOT NULL DEFAULT 1
+    boat_id INT          NOT NULL DEFAULT 1,
+    CONSTRAINT fk_users_boat FOREIGN KEY (boat_id) REFERENCES boats(id)
 );
 
 -- Wallet expenses
@@ -37,7 +38,9 @@ CREATE TABLE IF NOT EXISTS wallet_expenses (
     split_type    VARCHAR(20)    NOT NULL DEFAULT 'both',
     photo         VARCHAR(200)   DEFAULT NULL,
     created_by    INT            DEFAULT NULL,
-    created_at    TIMESTAMP      DEFAULT CURRENT_TIMESTAMP
+    created_at    TIMESTAMP      DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_expenses_paid_by FOREIGN KEY (paid_by) REFERENCES users(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_expenses_created_by FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
 );
 CREATE INDEX IF NOT EXISTS idx_expenses_paid_by ON wallet_expenses(paid_by);
 CREATE INDEX IF NOT EXISTS idx_expenses_date ON wallet_expenses(expense_date);
@@ -47,7 +50,9 @@ CREATE TABLE IF NOT EXISTS wallet_expense_splits (
     id         SERIAL PRIMARY KEY,
     expense_id INT            NOT NULL,
     user_id    INT            NOT NULL,
-    amount_eur DECIMAL(10,2)  NOT NULL
+    amount_eur DECIMAL(10,2)  NOT NULL,
+    CONSTRAINT fk_splits_expense FOREIGN KEY (expense_id) REFERENCES wallet_expenses(id) ON DELETE CASCADE,
+    CONSTRAINT fk_splits_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE RESTRICT
 );
 CREATE INDEX IF NOT EXISTS idx_splits_expense ON wallet_expense_splits(expense_id);
 CREATE INDEX IF NOT EXISTS idx_splits_user ON wallet_expense_splits(user_id);
@@ -60,7 +65,9 @@ CREATE TABLE IF NOT EXISTS wallet_audit_log (
     change_type VARCHAR(20)  NOT NULL,
     old_values  TEXT         DEFAULT NULL,
     new_values  TEXT         DEFAULT NULL,
-    changed_at  TIMESTAMP    DEFAULT CURRENT_TIMESTAMP
+    changed_at  TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_audit_expense FOREIGN KEY (expense_id) REFERENCES wallet_expenses(id) ON DELETE CASCADE,
+    CONSTRAINT fk_audit_changed_by FOREIGN KEY (changed_by) REFERENCES users(id) ON DELETE SET NULL
 );
 CREATE INDEX IF NOT EXISTS idx_audit_expense ON wallet_audit_log(expense_id);
 
@@ -71,7 +78,10 @@ CREATE TABLE IF NOT EXISTS wallet_settled (
     to_user_id   INT       NOT NULL,
     settled_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     settled_by   INT       DEFAULT NULL,
-    UNIQUE (from_user_id, to_user_id)
+    UNIQUE (from_user_id, to_user_id),
+    CONSTRAINT fk_settled_from FOREIGN KEY (from_user_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_settled_to FOREIGN KEY (to_user_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_settled_by FOREIGN KEY (settled_by) REFERENCES users(id) ON DELETE SET NULL
 );
 
 -- Shopping list
@@ -88,7 +98,11 @@ CREATE TABLE IF NOT EXISTS shopping_items (
     is_bought   BOOLEAN        NOT NULL DEFAULT FALSE,
     bought_by   INT            DEFAULT NULL,
     created_by  INT            DEFAULT NULL,
-    created_at  TIMESTAMP      DEFAULT CURRENT_TIMESTAMP
+    created_at  TIMESTAMP      DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_shopping_boat FOREIGN KEY (boat_id) REFERENCES boats(id),
+    CONSTRAINT fk_shopping_assigned FOREIGN KEY (assigned_to) REFERENCES users(id) ON DELETE SET NULL,
+    CONSTRAINT fk_shopping_bought_by FOREIGN KEY (bought_by) REFERENCES users(id) ON DELETE SET NULL,
+    CONSTRAINT fk_shopping_created_by FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
 );
 CREATE INDEX IF NOT EXISTS idx_shopping_boat ON shopping_items(boat_id);
 
@@ -105,7 +119,10 @@ CREATE TABLE IF NOT EXISTS logbook (
     skipper_user_id  INT            DEFAULT NULL,
     note             TEXT           DEFAULT NULL,
     created_by       INT            DEFAULT NULL,
-    created_at       TIMESTAMP      DEFAULT CURRENT_TIMESTAMP
+    created_at       TIMESTAMP      DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_logbook_boat FOREIGN KEY (boat_id) REFERENCES boats(id),
+    CONSTRAINT fk_logbook_skipper FOREIGN KEY (skipper_user_id) REFERENCES users(id) ON DELETE SET NULL,
+    CONSTRAINT fk_logbook_created_by FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
 );
 CREATE INDEX IF NOT EXISTS idx_logbook_boat_date ON logbook(boat_id, date);
 
@@ -120,7 +137,10 @@ CREATE TABLE IF NOT EXISTS menu_plan (
     note             TEXT        DEFAULT NULL,
     created_by       INT         DEFAULT NULL,
     created_at       TIMESTAMP   DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (boat_id, date, meal_type)
+    UNIQUE (boat_id, date, meal_type),
+    CONSTRAINT fk_menu_boat FOREIGN KEY (boat_id) REFERENCES boats(id),
+    CONSTRAINT fk_menu_cook FOREIGN KEY (cook_user_id) REFERENCES users(id) ON DELETE SET NULL,
+    CONSTRAINT fk_menu_created_by FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
 );
 
 -- Cars
@@ -130,7 +150,8 @@ CREATE TABLE IF NOT EXISTS cars (
     car_name       VARCHAR(100) DEFAULT NULL,
     seats          INT          NOT NULL DEFAULT 5,
     note           TEXT         DEFAULT NULL,
-    created_at     TIMESTAMP    DEFAULT CURRENT_TIMESTAMP
+    created_at     TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_cars_driver FOREIGN KEY (driver_user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
 -- Car passengers
@@ -138,7 +159,9 @@ CREATE TABLE IF NOT EXISTS car_passengers (
     id       SERIAL PRIMARY KEY,
     car_id   INT NOT NULL,
     user_id  INT NOT NULL,
-    added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_carpax_car FOREIGN KEY (car_id) REFERENCES cars(id) ON DELETE CASCADE,
+    CONSTRAINT fk_carpax_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_carpax_car ON car_passengers(car_id);
 

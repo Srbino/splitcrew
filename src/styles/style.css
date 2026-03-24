@@ -2287,11 +2287,16 @@ select.form-control {
 .avatar-md  { width: 36px; height: 36px; font-size: 0.85rem; }
 .avatar-lg  { width: 44px; height: 44px; font-size: 1rem; }
 
-.avatar-boat1   { background: var(--color-boat1); }
-.avatar-boat2   { background: var(--color-boat2); }
-.avatar-accent  { background: var(--color-warning); }
-.avatar-primary { background: var(--color-brand); }
-.avatar-gray    { background: var(--color-text-secondary); }
+.avatar-primary   { background: var(--color-brand); }
+.avatar-success   { background: var(--color-success); }
+.avatar-danger    { background: var(--color-danger); }
+.avatar-warning   { background: var(--color-warning); }
+.avatar-info      { background: var(--color-info); }
+.avatar-boat1     { background: var(--color-boat1); }
+.avatar-boat2     { background: var(--color-boat2); }
+.avatar-secondary { background: var(--color-text-secondary); }
+.avatar-accent    { background: var(--color-warning); }
+.avatar-gray      { background: var(--color-text-secondary); }
 
 /* ============================================================
    FAB – Floating Action Button

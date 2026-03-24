@@ -5,7 +5,7 @@ import { apiSuccess, apiError } from '@/lib/utils';
 export async function GET(request: Request) {
   try {
     const session = await getSession();
-    if (!session.userId) return apiError('Unauthorized', 401);
+    if (!session.userId && !session.isAdmin) return apiError('Unauthorized', 401);
 
     const { searchParams } = new URL(request.url);
     const action = searchParams.get('action');
@@ -16,8 +16,8 @@ export async function GET(request: Request) {
 
       const items = await query(
         `SELECT si.*,
-                ua.name AS assigned_to_name,
-                ub.name AS bought_by_name,
+                ua.name AS assigned_to_name, ua.avatar AS assigned_to_avatar,
+                ub.name AS bought_by_name, ub.avatar AS bought_by_avatar,
                 uc.name AS created_by_name
          FROM shopping_items si
          LEFT JOIN users ua ON si.assigned_to = ua.id
@@ -61,7 +61,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const session = await getSession();
-    if (!session.userId) return apiError('Unauthorized', 401);
+    if (!session.userId && !session.isAdmin) return apiError('Unauthorized', 401);
 
     const csrfError = await requireCsrf(request);
     if (csrfError) return csrfError;

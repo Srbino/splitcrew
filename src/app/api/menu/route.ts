@@ -5,7 +5,7 @@ import { apiSuccess, apiError } from '@/lib/utils';
 export async function GET(request: Request) {
   try {
     const session = await getSession();
-    if (!session.userId) return apiError('Unauthorized', 401);
+    if (!session.userId && !session.isAdmin) return apiError('Unauthorized', 401);
 
     const { searchParams } = new URL(request.url);
     const action = searchParams.get('action');
@@ -15,7 +15,7 @@ export async function GET(request: Request) {
       if (!boatId) return apiError('boat_id is required');
 
       const meals = await query(
-        `SELECT mp.*, u.name AS cook_name
+        `SELECT mp.*, u.name AS cook_name, u.avatar AS cook_avatar
          FROM menu_plan mp
          LEFT JOIN users u ON mp.cook_user_id = u.id
          WHERE mp.boat_id = $1
@@ -36,7 +36,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const session = await getSession();
-    if (!session.userId) return apiError('Unauthorized', 401);
+    if (!session.userId && !session.isAdmin) return apiError('Unauthorized', 401);
 
     const csrfError = await requireCsrf(request);
     if (csrfError) return csrfError;
