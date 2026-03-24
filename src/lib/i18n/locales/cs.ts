@@ -374,7 +374,7 @@ const cs: Translations = {
     tripName: 'Název výletu',
     tripDateFrom: 'Datum začátku',
     tripDateTo: 'Datum konce',
-    baseCurrency: 'Základní měna',
+    baseCurrency: 'Zobrazovací měna',
     language: 'Jazyk',
     appIcon: 'Ikona aplikace (zobrazena v horní liště)',
     passwords: 'Hesla',

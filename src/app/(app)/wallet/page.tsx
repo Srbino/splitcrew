@@ -177,6 +177,7 @@ export default function WalletPage() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [totalEur, setTotalEur] = useState(0);
   const [baseCurrency, setBaseCurrency] = useState('EUR');
+  const [displayRate, setDisplayRate] = useState(1);
   const [filter, setFilter] = useState('all');
   const [loadingExpenses, setLoadingExpenses] = useState(true);
 
@@ -214,6 +215,9 @@ export default function WalletPage() {
 
   // Rates for conversion hint
   const [currentRates, setCurrentRates] = useState<Record<string, number>>({});
+
+  // Convert EUR amount to display currency
+  const toDisplay = useCallback((eur: number) => Math.round(eur * displayRate * 100) / 100, [displayRate]);
 
   // ── Load users on mount ──
   useEffect(() => {
@@ -270,11 +274,13 @@ export default function WalletPage() {
       expenses: Expense[];
       total_eur: number;
       base_currency: string;
+      display_rate: number;
     }>(`/api/wallet?action=list&filter=${filter}`);
     if (res.success && res.data) {
       setExpenses(res.data.expenses);
       setTotalEur(res.data.total_eur);
       setBaseCurrency(res.data.base_currency);
+      if (res.data.display_rate) setDisplayRate(res.data.display_rate);
     }
     setLoadingExpenses(false);
   }, [filter]);
@@ -284,10 +290,12 @@ export default function WalletPage() {
     const res = await apiCall<{
       balances: UserBalance[];
       base_currency: string;
+      display_rate: number;
     }>('/api/wallet?action=balances');
     if (res.success && res.data) {
       setBalances(res.data.balances);
       setBaseCurrency(res.data.base_currency);
+      if (res.data.display_rate) setDisplayRate(res.data.display_rate);
     }
     setLoadingBalances(false);
   }, []);
@@ -297,11 +305,13 @@ export default function WalletPage() {
     const res = await apiCall<{
       settlements: Settlement[];
       base_currency: string;
+      display_rate: number;
       exchange_rates: Record<string, number>;
     }>('/api/wallet?action=settlements');
     if (res.success && res.data) {
       setSettlements(res.data.settlements);
       setBaseCurrency(res.data.base_currency);
+      if (res.data.display_rate) setDisplayRate(res.data.display_rate);
       setExchangeRates(res.data.exchange_rates);
     }
     setLoadingSettlements(false);
@@ -489,14 +499,19 @@ export default function WalletPage() {
   // ── Conversion hint ──
 
   const conversionHint = useMemo(() => {
-    if (formCurrency === baseCurrency) return null;
+    if (formCurrency === 'EUR') return null;
     const rate = currentRates[formCurrency];
     if (!rate || rate <= 0) return null;
     const amt = parseFloat(formAmount) || 0;
     if (amt <= 0) return null;
-    const converted = Math.round((amt / rate) * 100) / 100;
-    return `${formatCurrency(amt, formCurrency)} = ~${formatCurrency(converted, baseCurrency)} (1 ${baseCurrency} = ${rate} ${formCurrency})`;
-  }, [formAmount, formCurrency, baseCurrency, currentRates]);
+    const convertedEur = Math.round((amt / rate) * 100) / 100;
+    const displayAmt = toDisplay(convertedEur);
+    // Show EUR conversion, and display currency if different
+    if (baseCurrency === 'EUR') {
+      return `${formatCurrency(amt, formCurrency)} = ~${formatCurrency(convertedEur, 'EUR')} (1 EUR = ${rate} ${formCurrency})`;
+    }
+    return `${formatCurrency(amt, formCurrency)} = ~${formatCurrency(displayAmt, baseCurrency)} (1 EUR = ${rate} ${formCurrency})`;
+  }, [formAmount, formCurrency, baseCurrency, currentRates, toDisplay]);
 
   // ── Category options ──
   const categories = [
@@ -520,7 +535,7 @@ export default function WalletPage() {
           <h1 className="text-2xl font-bold tracking-tight">{t('wallet.title')}</h1>
           {totalEur > 0 && activeTab === 'expenses' && (
             <p className="text-sm text-muted-foreground mt-1">
-              {t('wallet.totalSpent')}: {formatCurrency(totalEur, baseCurrency)}
+              {t('wallet.totalSpent')}: {formatCurrency(toDisplay(totalEur), baseCurrency)}
             </p>
           )}
         </div>
@@ -557,6 +572,7 @@ export default function WalletPage() {
           <ExpensesTab
             expenses={expenses}
             baseCurrency={baseCurrency}
+            toDisplay={toDisplay}
             boats={boats}
             filter={filter}
             setFilter={setFilter}
@@ -575,6 +591,7 @@ export default function WalletPage() {
           <BalancesTab
             balances={balances}
             baseCurrency={baseCurrency}
+            toDisplay={toDisplay}
             loading={loadingBalances}
             t={t}
           />
@@ -584,6 +601,7 @@ export default function WalletPage() {
           <SettlementsTab
             settlements={settlements}
             baseCurrency={baseCurrency}
+            toDisplay={toDisplay}
             exchangeRates={exchangeRates}
             loading={loadingSettlements}
             onToggleSettle={handleToggleSettle}
@@ -716,6 +734,7 @@ export default function WalletPage() {
 function ExpensesTab({
   expenses,
   baseCurrency,
+  toDisplay,
   boats,
   filter,
   setFilter,
@@ -727,6 +746,7 @@ function ExpensesTab({
 }: {
   expenses: Expense[];
   baseCurrency: string;
+  toDisplay: (eur: number) => number;
   boats: BoatInfo[];
   filter: string;
   setFilter: (f: string) => void;
@@ -780,6 +800,7 @@ function ExpensesTab({
               <ExpenseCard
                 expense={expense}
                 baseCurrency={baseCurrency}
+                toDisplay={toDisplay}
                 onEdit={() => onEdit(expense)}
                 onDelete={() => onDelete(expense.id)}
                 onAudit={() => onAudit(expense.id)}
@@ -798,6 +819,7 @@ function ExpensesTab({
 function ExpenseCard({
   expense,
   baseCurrency,
+  toDisplay,
   onEdit,
   onDelete,
   onAudit,
@@ -805,12 +827,13 @@ function ExpenseCard({
 }: {
   expense: Expense;
   baseCurrency: string;
+  toDisplay: (eur: number) => number;
   onEdit: () => void;
   onDelete: () => void;
   onAudit: () => void;
   t: (key: string) => string;
 }) {
-  const isConverted = expense.currency !== baseCurrency;
+  const showOriginal = expense.currency !== baseCurrency;
 
   return (
     <Card className="cursor-pointer hover:bg-accent/50 transition-colors py-0" onClick={onEdit}>
@@ -834,18 +857,18 @@ function ExpenseCard({
 
         {/* Amount */}
         <div className="text-right shrink-0">
-          {isConverted ? (
+          {showOriginal ? (
             <>
               <span className="block font-semibold text-sm">
                 {formatCurrency(expense.amount, expense.currency)}
               </span>
               <span className="text-xs text-muted-foreground">
-                {formatCurrency(expense.amount_eur, baseCurrency)}
+                {formatCurrency(toDisplay(expense.amount_eur), baseCurrency)}
               </span>
             </>
           ) : (
             <span className="font-semibold text-sm">
-              {formatCurrency(expense.amount_eur, baseCurrency)}
+              {formatCurrency(toDisplay(expense.amount_eur), baseCurrency)}
             </span>
           )}
         </div>
@@ -903,11 +926,13 @@ function ExpenseCard({
 function BalancesTab({
   balances,
   baseCurrency,
+  toDisplay,
   loading,
   t,
 }: {
   balances: UserBalance[];
   baseCurrency: string;
+  toDisplay: (eur: number) => number;
   loading: boolean;
   t: (key: string) => string;
 }) {
@@ -961,10 +986,10 @@ function BalancesTab({
                   </div>
                 </div>
                 <span className="text-right text-sm tabular-nums">
-                  {formatCurrency(b.paid, baseCurrency)}
+                  {formatCurrency(toDisplay(b.paid), baseCurrency)}
                 </span>
                 <span className="text-right text-sm tabular-nums">
-                  {formatCurrency(b.share, baseCurrency)}
+                  {formatCurrency(toDisplay(b.share), baseCurrency)}
                 </span>
                 <span
                   className={cn(
@@ -973,7 +998,7 @@ function BalancesTab({
                     isNegative && 'text-destructive',
                   )}
                 >
-                  {b.balance > 0 ? '+' : ''}{formatCurrency(b.balance, baseCurrency)}
+                  {b.balance > 0 ? '+' : ''}{formatCurrency(toDisplay(b.balance), baseCurrency)}
                 </span>
               </CardContent>
             </Card>
@@ -989,6 +1014,7 @@ function BalancesTab({
 function SettlementsTab({
   settlements,
   baseCurrency,
+  toDisplay,
   exchangeRates,
   loading,
   onToggleSettle,
@@ -996,6 +1022,7 @@ function SettlementsTab({
 }: {
   settlements: Settlement[];
   baseCurrency: string;
+  toDisplay: (eur: number) => number;
   exchangeRates: Record<string, number>;
   loading: boolean;
   onToggleSettle: (s: Settlement) => void;
@@ -1052,12 +1079,12 @@ function SettlementsTab({
               {/* Amount */}
               <div className="ml-auto text-right shrink-0">
                 <div className="font-bold text-base text-destructive">
-                  {formatCurrency(s.amount, baseCurrency)}
+                  {formatCurrency(toDisplay(s.amount), baseCurrency)}
                 </div>
                 {showCurrencies.length > 0 && (
                   <div className="text-xs text-muted-foreground">
                     {showCurrencies.map(c => {
-                      const converted = Math.round(s.amount * exchangeRates[c] * 100) / 100;
+                      const converted = Math.round(s.amount * (exchangeRates[c] ?? 1) * 100) / 100;
                       return (
                         <span key={c} className="mr-2">
                           ~{formatCurrency(converted, c)}

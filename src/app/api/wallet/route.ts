@@ -1,7 +1,7 @@
 import { getSession, requireCsrf } from '@/lib/auth';
 import { query, queryOne, execute, getSetting, getAllUsers, pool } from '@/lib/db';
 import { apiSuccess, apiError } from '@/lib/utils';
-import { convertToBase } from '@/lib/currencies';
+import { convertToBase, CANONICAL_CURRENCY } from '@/lib/currencies';
 import { getExchangeRate, getExchangeRates, getExchangeRateForDate, syncRatesForRange } from '@/lib/exchange';
 
 // ── Types ──
@@ -177,10 +177,21 @@ async function handleList(
     split_amounts: splitAmountsByExpense[e.id] || {},
   }));
 
+  // Compute display rate for client-side conversion
+  const displayCurrency = baseCurrency;
+  let displayRate = 1;
+  if (displayCurrency !== CANONICAL_CURRENCY) {
+    try {
+      const rates = await getExchangeRates(CANONICAL_CURRENCY);
+      displayRate = rates[displayCurrency] ?? 1;
+    } catch { /* fallback to 1 */ }
+  }
+
   return apiSuccess({
     expenses: data,
     total_eur: totalEur,
-    base_currency: baseCurrency,
+    base_currency: displayCurrency,
+    display_rate: displayRate,
   });
 }
 
@@ -224,7 +235,16 @@ async function handleBalances() {
     };
   });
 
-  return apiSuccess({ balances, base_currency: baseCurrency });
+  // Compute display rate for client-side conversion
+  let displayRate = 1;
+  if (baseCurrency !== CANONICAL_CURRENCY) {
+    try {
+      const rates = await getExchangeRates(CANONICAL_CURRENCY);
+      displayRate = rates[baseCurrency] ?? 1;
+    } catch { /* fallback to 1 */ }
+  }
+
+  return apiSuccess({ balances, base_currency: baseCurrency, display_rate: displayRate });
 }
 
 async function handleSettlements() {
@@ -304,10 +324,14 @@ async function handleSettlements() {
     settledRows.map(r => `${r.from_user_id}-${r.to_user_id}`)
   );
 
-  // Get exchange rates for display
+  // Get exchange rates for display (always from EUR since amounts are in EUR)
   let exchangeRates: Record<string, number> = {};
+  let displayRate = 1;
   try {
-    exchangeRates = await getExchangeRates(baseCurrency);
+    exchangeRates = await getExchangeRates(CANONICAL_CURRENCY);
+    if (baseCurrency !== CANONICAL_CURRENCY) {
+      displayRate = exchangeRates[baseCurrency] ?? 1;
+    }
   } catch {
     // ignore
   }
@@ -331,6 +355,7 @@ async function handleSettlements() {
   return apiSuccess({
     settlements: result,
     base_currency: baseCurrency,
+    display_rate: displayRate,
     exchange_rates: exchangeRates,
   });
 }
@@ -365,14 +390,14 @@ async function handleAudit(searchParams: URLSearchParams) {
 }
 
 async function handleRate() {
-  const baseCurrency = await getSetting('base_currency', 'EUR');
+  const displayCurrency = await getSetting('base_currency', 'EUR');
   let rates: Record<string, number> = {};
   try {
-    rates = await getExchangeRates(baseCurrency);
+    rates = await getExchangeRates(CANONICAL_CURRENCY);
   } catch {
     // ignore
   }
-  return apiSuccess({ base_currency: baseCurrency, rates });
+  return apiSuccess({ base_currency: displayCurrency, rates });
 }
 
 /**
@@ -380,7 +405,7 @@ async function handleRate() {
  * Fetches historical rates from Frankfurter API and stores per-day.
  */
 async function handleSyncRates() {
-  const baseCurrency = await getSetting('base_currency', 'EUR');
+  const baseCurrency = CANONICAL_CURRENCY; // Always sync EUR rates
   const tripFrom = await getSetting('trip_date_from', '');
   const tripTo = await getSetting('trip_date_to', '');
 
@@ -493,7 +518,7 @@ async function handleAdd(
     return apiError('Date is required');
   }
 
-  const baseCurrency = await getSetting('base_currency', 'EUR');
+  const storageCurrency = CANONICAL_CURRENCY; // Always store in EUR
   let amountBase = amount;
   let exchangeRate: number | null = null;
 
@@ -501,9 +526,9 @@ async function handleAdd(
   const parsedDate = parseExpenseDate(expense_date);
   const expenseDateStr = parsedDate.slice(0, 10);
 
-  // Currency conversion — use the rate for the expense date
-  if (currency !== baseCurrency) {
-    const rate = await getExchangeRateForDate(baseCurrency, currency, expenseDateStr);
+  // Currency conversion — always convert to EUR for storage
+  if (currency !== storageCurrency) {
+    const rate = await getExchangeRateForDate(storageCurrency, currency, expenseDateStr);
     if (rate <= 0) {
       return apiError(`Could not get exchange rate for ${currency} on ${expenseDateStr}`);
     }
@@ -633,7 +658,7 @@ async function handleEdit(
     return apiError('Expense not found', 404);
   }
 
-  const baseCurrency = await getSetting('base_currency', 'EUR');
+  const storageCurrency = CANONICAL_CURRENCY; // Always store in EUR
   let amountBase = amount;
   let exchangeRate: number | null = null;
 
@@ -641,9 +666,9 @@ async function handleEdit(
   const parsedDate = parseExpenseDate(expense_date);
   const expenseDateStr = parsedDate.slice(0, 10);
 
-  // Currency conversion — use the rate for the expense date
+  // Currency conversion — always convert to EUR for storage
   // If same currency and same date, reuse original rate for consistency
-  if (currency !== baseCurrency) {
+  if (currency !== storageCurrency) {
     const origDate = existing.expense_date
       ? new Date(existing.expense_date).toISOString().slice(0, 10)
       : '';
@@ -657,7 +682,7 @@ async function handleEdit(
       exchangeRate = parseFloat(existing.exchange_rate);
     } else {
       // Different currency or different date → fetch the rate for the new date
-      const rate = await getExchangeRateForDate(baseCurrency, currency, expenseDateStr);
+      const rate = await getExchangeRateForDate(storageCurrency, currency, expenseDateStr);
       if (rate <= 0) {
         return apiError(`Could not get exchange rate for ${currency} on ${expenseDateStr}`);
       }

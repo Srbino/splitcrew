@@ -31,21 +31,21 @@ export async function GET() {
     const tripName = await getSetting('trip_name', 'Trip');
     const tripFrom = await getSetting('trip_date_from', '');
     const tripTo = await getSetting('trip_date_to', '');
-    const baseCurrency = await getSetting('base_currency', 'EUR');
-    const exportCurrency = await getSetting('export_currency', baseCurrency);
+    const storageCurrency = 'EUR'; // amount_eur is always in EUR
+    const exportCurrency = await getSetting('export_currency', storageCurrency);
 
-    // Get conversion rate from base → export currency
+    // Get conversion rate from EUR → export currency
     let exportRate = 1;
-    let effectiveExportCurrency = baseCurrency;
-    if (exportCurrency !== baseCurrency) {
+    let effectiveExportCurrency = storageCurrency;
+    if (exportCurrency !== storageCurrency) {
       const { getExchangeRates } = await import('@/lib/exchange');
-      const rates = await getExchangeRates(baseCurrency);
+      const rates = await getExchangeRates(storageCurrency);
       const rate = rates[exportCurrency];
       if (rate && rate > 0) {
         exportRate = rate;
         effectiveExportCurrency = exportCurrency;
       }
-      // If rate unavailable: keep exportRate=1 and effectiveExportCurrency=baseCurrency
+      // If rate unavailable: keep exportRate=1 and effectiveExportCurrency=EUR
       // so CSV headers and values are always consistent
     }
     const toExport = (baseAmount: number) => exportRate === 1 ? baseAmount : Math.round(baseAmount * exportRate * 100) / 100;
@@ -76,7 +76,7 @@ export async function GET() {
        ORDER BY e.expense_date`
     );
     const expensesCsv = toCsv(
-      ['ID', 'Date', 'Description', 'Amount', 'Currency', `Amount (${baseCurrency})`, 'Exchange Rate', 'Paid By', 'Category', 'Split Type'],
+      ['ID', 'Date', 'Description', 'Amount', 'Currency', `Amount (${storageCurrency})`, 'Exchange Rate', 'Paid By', 'Category', 'Split Type'],
       expenses.map(e => [
         String(e.id),
         new Date(e.expense_date).toISOString().slice(0, 10),
@@ -102,7 +102,7 @@ export async function GET() {
        ORDER BY s.expense_id`
     );
     const splitsCsv = toCsv(
-      ['Expense ID', 'Expense Description', 'User', `Share (${baseCurrency})`],
+      ['Expense ID', 'Expense Description', 'User', `Share (${storageCurrency})`],
       splits.map(s => [String(s.expense_id), s.description, s.user_name, s.amount_eur]),
     );
 
@@ -116,8 +116,8 @@ export async function GET() {
        FROM users u LEFT JOIN boats b ON u.boat_id = b.id
        ORDER BY u.name`
     );
-    const balanceHeaders = ['Name', 'Boat', `Paid (${baseCurrency})`, `Share (${baseCurrency})`, `Balance (${baseCurrency})`];
-    if (expCur !== baseCurrency) {
+    const balanceHeaders = ['Name', 'Boat', `Paid (${storageCurrency})`, `Share (${storageCurrency})`, `Balance (${storageCurrency})`];
+    if (expCur !== storageCurrency) {
       balanceHeaders.push(`Paid (${expCur})`, `Share (${expCur})`, `Balance (${expCur})`);
     }
     const balancesCsv = toCsv(
@@ -127,7 +127,7 @@ export async function GET() {
         const s = parseFloat(b.share);
         const bal = p - s;
         const row = [b.name, b.boat_name, b.paid, b.share, bal.toFixed(2)];
-        if (expCur !== baseCurrency) {
+        if (expCur !== storageCurrency) {
           row.push(toExport(p).toFixed(2), toExport(s).toFixed(2), toExport(bal).toFixed(2));
         }
         return row;
@@ -264,9 +264,9 @@ export async function GET() {
     const tripInfo = [
       `Trip: ${tripName}`,
       `Dates: ${tripFrom || 'N/A'} — ${tripTo || 'N/A'}`,
-      `Base Currency: ${baseCurrency}`,
+      `Base Currency: ${storageCurrency}`,
       `Crew: ${users.length} members`,
-      `Total Expenses: ${totalExpenses.toFixed(2)} ${baseCurrency} (${expenses.length} transactions)`,
+      `Total Expenses: ${totalExpenses.toFixed(2)} ${storageCurrency} (${expenses.length} transactions)`,
       `Total Nautical Miles: ${totalNm.toFixed(1)}`,
       `Logbook Entries: ${logbook.length}`,
       `Shopping Items: ${shopping.length} (${shopping.filter(s => s.is_bought).length} bought)`,
@@ -276,7 +276,7 @@ export async function GET() {
 
     // ── HTML Report ──
     const htmlReport = generateHtmlReport({
-      tripName, tripFrom, tripTo, baseCurrency,
+      tripName, tripFrom, tripTo, storageCurrency,
       users, expenses, balances, settled, shopping, logbook, meals,
       totalExpenses, totalNm,
     });
@@ -310,7 +310,7 @@ export async function GET() {
 // ── HTML Report Generator ──
 
 function generateHtmlReport(data: {
-  tripName: string; tripFrom: string; tripTo: string; baseCurrency: string;
+  tripName: string; tripFrom: string; tripTo: string; storageCurrency: string;
   users: { name: string; phone: string | null; email: string | null; boat_name: string }[];
   expenses: { id: number; expense_date: string; description: string; amount: string; currency: string; amount_eur: string; paid_by_name: string; category: string }[];
   balances: { name: string; boat_name: string; paid: string; share: string }[];
@@ -320,7 +320,7 @@ function generateHtmlReport(data: {
   meals: { date: string; boat_name: string; meal_type: string; cook_name: string | null; meal_description: string | null }[];
   totalExpenses: number; totalNm: number;
 }): string {
-  const { tripName, tripFrom, tripTo, baseCurrency, users, expenses, balances, settled, shopping, logbook, meals, totalExpenses, totalNm } = data;
+  const { tripName, tripFrom, tripTo, storageCurrency, users, expenses, balances, settled, shopping, logbook, meals, totalExpenses, totalNm } = data;
 
   const fmtDate = (d: string) => { try { return new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }); } catch { return d; } };
   const fmtMoney = (n: string | number) => Number(n).toFixed(2);
@@ -354,10 +354,10 @@ function generateHtmlReport(data: {
 </head>
 <body>
 <h1>⛵ ${tripName}</h1>
-<p class="subtitle">${tripFrom ? fmtDate(tripFrom) : '—'} — ${tripTo ? fmtDate(tripTo) : '—'} · ${baseCurrency} · ${users.length} crew</p>
+<p class="subtitle">${tripFrom ? fmtDate(tripFrom) : '—'} — ${tripTo ? fmtDate(tripTo) : '—'} · ${storageCurrency} · ${users.length} crew</p>
 
 <div class="stats">
-  <div class="stat"><div class="stat-value">${fmtMoney(totalExpenses)} ${baseCurrency}</div><div class="stat-label">Total Spent</div></div>
+  <div class="stat"><div class="stat-value">${fmtMoney(totalExpenses)} ${storageCurrency}</div><div class="stat-label">Total Spent</div></div>
   <div class="stat"><div class="stat-value">${totalNm.toFixed(1)} NM</div><div class="stat-label">Nautical Miles</div></div>
   <div class="stat"><div class="stat-value">${expenses.length}</div><div class="stat-label">Expenses</div></div>
   <div class="stat"><div class="stat-value">${logbook.length}</div><div class="stat-label">Log Entries</div></div>
@@ -381,7 +381,7 @@ ${balances.map(b => {
 
 <h2>🧾 Expenses</h2>
 <table style="${tableStyle}">
-<tr><th style="${thStyle}">Date</th><th style="${thStyle}">Description</th><th style="${thStyle}">Paid By</th><th style="${thStyle}">Category</th><th style="${thStyle};text-align:right">Amount</th><th style="${thStyle};text-align:right">${baseCurrency}</th></tr>
+<tr><th style="${thStyle}">Date</th><th style="${thStyle}">Description</th><th style="${thStyle}">Paid By</th><th style="${thStyle}">Category</th><th style="${thStyle};text-align:right">Amount</th><th style="${thStyle};text-align:right">${storageCurrency}</th></tr>
 ${expenses.map(e => `<tr><td style="${tdStyle}">${fmtDate(e.expense_date)}</td><td style="${tdStyle}">${e.description}</td><td style="${tdStyle}">${e.paid_by_name}</td><td style="${tdStyle}"><span class="badge">${e.category}</span></td><td style="${tdRight}">${fmtMoney(e.amount)} ${e.currency}</td><td style="${tdRight}">${fmtMoney(e.amount_eur)}</td></tr>`).join('\n')}
 </table>
 

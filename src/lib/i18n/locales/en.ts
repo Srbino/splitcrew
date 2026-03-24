@@ -372,7 +372,7 @@ const en = {
     tripName: 'Trip name',
     tripDateFrom: 'Start date',
     tripDateTo: 'End date',
-    baseCurrency: 'Base currency',
+    baseCurrency: 'Display currency',
     language: 'Language',
     appIcon: 'App Icon (shown in topbar)',
     passwords: 'Passwords',

@@ -1,3 +1,6 @@
+/** The canonical storage currency. All amount_eur values are always stored in this currency. */
+export const CANONICAL_CURRENCY = 'EUR';
+
 /** Supported currencies with metadata */
 export interface CurrencyInfo {
   code: string;

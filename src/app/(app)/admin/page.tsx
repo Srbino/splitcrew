@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Settings, Users, Ship, Database,
   Edit2, Trash2, Plus, Lock, KeyRound,
-  Download, RefreshCw, BarChart3,
+  Download, RefreshCw, BarChart3, Camera, X,
 } from 'lucide-react';
 import { Modal } from '@/components/shared/modal';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
@@ -185,6 +185,9 @@ export default function AdminPage() {
   const [formBoatId, setFormBoatId] = useState(0);
   const [formRole, setFormRole] = useState<'crew' | 'captain'>('crew');
   const [formPassword, setFormPassword] = useState('');
+  const [formAvatarFile, setFormAvatarFile] = useState<File | null>(null);
+  const [formAvatarPreview, setFormAvatarPreview] = useState<string | null>(null);
+  const [formAvatarRemove, setFormAvatarRemove] = useState(false);
   const [userSaving, setUserSaving] = useState(false);
 
   // Reset Password modal
@@ -368,6 +371,8 @@ export default function AdminPage() {
     if (res.success) {
       setSettingsIsError(false);
       setSettingsMessage(t('admin.settingsSaved'));
+      // Reload from DB to confirm save persisted
+      await loadSettings();
       setTimeout(() => setSettingsMessage(''), 3000);
     } else {
       setSettingsIsError(true);
@@ -405,6 +410,9 @@ export default function AdminPage() {
   function openAddUserModal() {
     setEditingUser(null);
     setFormName('');
+    setFormAvatarFile(null);
+    setFormAvatarPreview(null);
+    setFormAvatarRemove(false);
     setFormPhone('');
     setFormEmail('');
     setFormPassword('');
@@ -416,6 +424,9 @@ export default function AdminPage() {
   function openEditUserModal(user: UserData) {
     setEditingUser(user);
     setFormName(user.name);
+    setFormAvatarFile(null);
+    setFormAvatarPreview(user.avatar || null);
+    setFormAvatarRemove(false);
     setFormPhone(user.phone || '');
     setFormEmail(user.email || '');
     setFormPassword('');
@@ -458,14 +469,36 @@ export default function AdminPage() {
         };
 
     const res = await apiCall('/api/admin/users', 'POST', payload);
-    setUserSaving(false);
 
-    if (res.success) {
-      setShowUserModal(false);
-      loadUsers();
-    } else {
+    if (!res.success) {
+      setUserSaving(false);
       alert(res.error || t('errors.generic'));
+      return;
     }
+
+    // Handle avatar upload / removal for existing users
+    if (editingUser) {
+      const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+      if (formAvatarFile) {
+        const fd = new FormData();
+        fd.append('file', formAvatarFile);
+        fd.append('userId', String(editingUser.id));
+        await fetch('/api/admin/avatar', {
+          method: 'POST',
+          headers: { 'X-CSRF-Token': csrfToken },
+          body: fd,
+        });
+      } else if (formAvatarRemove) {
+        await fetch(`/api/admin/avatar?userId=${editingUser.id}`, {
+          method: 'DELETE',
+          headers: { 'X-CSRF-Token': csrfToken },
+        });
+      }
+    }
+
+    setUserSaving(false);
+    setShowUserModal(false);
+    loadUsers();
   }
 
   async function handleResetPassword() {
@@ -700,6 +733,9 @@ export default function AdminPage() {
                             <option key={code} value={code}>{code}</option>
                           ))}
                         </select>
+                        <p className="text-[11px] text-muted-foreground mt-1">
+                          {settings.language === 'cs' ? 'Částky jsou uloženy v EUR. Toto mění pouze zobrazení.' : 'Amounts are stored in EUR. This only changes display.'}
+                        </p>
                       </div>
                       <div className="space-y-2">
                         <Label>{t('admin.language')}</Label>
@@ -1318,6 +1354,55 @@ export default function AdminPage() {
           </div>
         }
       >
+        {/* Avatar upload (edit mode only) */}
+        {editingUser && (
+          <div className="space-y-2 mb-4">
+            <Label>Avatar</Label>
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <Avatar className={cn('h-16 w-16 shrink-0', avatarColorClass(editingUser.id))}>
+                  {formAvatarPreview && !formAvatarRemove ? (
+                    <AvatarImage src={formAvatarPreview} alt={editingUser.name} />
+                  ) : null}
+                  <AvatarFallback className="text-lg">{getInitials(editingUser.name)}</AvatarFallback>
+                </Avatar>
+              </div>
+              <div className="flex flex-col gap-2">
+                <label className="cursor-pointer">
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    className="sr-only"
+                    onChange={e => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      setFormAvatarFile(file);
+                      setFormAvatarRemove(false);
+                      const reader = new FileReader();
+                      reader.onload = ev => setFormAvatarPreview(ev.target?.result as string);
+                      reader.readAsDataURL(file);
+                    }}
+                  />
+                  <span className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-md border border-input bg-background hover:bg-accent cursor-pointer transition-colors">
+                    <Camera className="h-3.5 w-3.5" />
+                    Nahrát foto
+                  </span>
+                </label>
+                {(formAvatarPreview && !formAvatarRemove) && (
+                  <button
+                    type="button"
+                    onClick={() => { setFormAvatarRemove(true); setFormAvatarFile(null); setFormAvatarPreview(null); }}
+                    className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-md border border-destructive/50 text-destructive hover:bg-destructive/10 cursor-pointer transition-colors"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                    Odstranit
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="space-y-2 mb-4">
           <Label>{t('admin.userName')}</Label>
           <Input

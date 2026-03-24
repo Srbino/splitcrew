@@ -28,8 +28,8 @@ export default async function AppLayout({
   const allowedCurrenciesJson = await getSetting('allowed_currencies', `["${baseCurrency}"]`);
   const allowedCurrencies = parseAllowedCurrencies(allowedCurrenciesJson, baseCurrency);
 
-  // Auto-refresh today's exchange rates (non-blocking)
-  ensureTodayRates(baseCurrency).catch(() => {});
+  // Auto-refresh today's exchange rates (non-blocking, always EUR-based)
+  ensureTodayRates('EUR').catch(() => {});
 
   // Get user info
   let userName = session.userName || 'Guest';

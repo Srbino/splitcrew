@@ -195,20 +195,32 @@ async function getDailyRates(baseCurrency: string, date: string): Promise<Exchan
     return rates;
   }
 
-  // 3. Fallback: try the closest available date (yesterday, day before, etc.)
-  const fallback = await queryOne<{ rates: string; rate_date: string }>(
+  // 3. Fallback: try the closest available date (before OR after target date)
+  const fallbackBefore = await queryOne<{ rates: string; rate_date: string }>(
     `SELECT rates, rate_date FROM exchange_rates_daily
      WHERE base_currency = $1 AND rate_date <= $2
      ORDER BY rate_date DESC LIMIT 1`,
     [baseCurrency, date]
   );
 
-  if (fallback) {
+  if (fallbackBefore) {
     try {
-      return JSON.parse(fallback.rates);
-    } catch {
-      return {};
-    }
+      return JSON.parse(fallbackBefore.rates);
+    } catch { /* corrupted */ }
+  }
+
+  // 3b. No older rates — try closest newer rate (e.g., today's cached rate)
+  const fallbackAfter = await queryOne<{ rates: string; rate_date: string }>(
+    `SELECT rates, rate_date FROM exchange_rates_daily
+     WHERE base_currency = $1 AND rate_date >= $2
+     ORDER BY rate_date ASC LIMIT 1`,
+    [baseCurrency, date]
+  );
+
+  if (fallbackAfter) {
+    try {
+      return JSON.parse(fallbackAfter.rates);
+    } catch { /* corrupted */ }
   }
 
   // 4. Last resort: try fetching latest from API

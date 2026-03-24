@@ -1,7 +1,8 @@
 import { requireAuth } from '@/lib/auth';
 import { query, getSetting } from '@/lib/db';
 import { formatMoney, formatDate, cn, getInitials, avatarColorClass } from '@/lib/utils';
-import { formatCurrency } from '@/lib/currencies';
+import { formatCurrency, CANONICAL_CURRENCY } from '@/lib/currencies';
+import { getExchangeRates } from '@/lib/exchange';
 import { t } from '@/lib/i18n';
 import { AnimatedPage } from '@/components/shared/animations';
 import {
@@ -25,8 +26,18 @@ export default async function DashboardPage() {
   const tripName = await getSetting('trip_name', 'Voyage');
   const tripFrom = await getSetting('trip_date_from', '');
   const tripTo = await getSetting('trip_date_to', '');
-  const baseCurrency = await getSetting('base_currency', 'EUR');
+  const displayCurrency = await getSetting('base_currency', 'EUR');
   const locale = await getSetting('language', 'en');
+
+  // Get display rate for converting EUR amounts to display currency
+  let displayRate = 1;
+  if (displayCurrency !== CANONICAL_CURRENCY) {
+    try {
+      const rates = await getExchangeRates(CANONICAL_CURRENCY);
+      displayRate = rates[displayCurrency] ?? 1;
+    } catch { /* fallback to 1 */ }
+  }
+  const toDisplay = (eur: number) => Math.round(eur * displayRate * 100) / 100;
 
   // User balance (members only)
   let paid = 0, owed = 0, balance = 0;
@@ -185,12 +196,12 @@ export default async function DashboardPage() {
                   'text-xl sm:text-2xl font-bold tracking-tight tabular-nums',
                   balance >= 0 ? 'text-success' : 'text-destructive',
                 )}>
-                  {balance >= 0 ? '+' : ''}{formatCurrency(balance, baseCurrency)}
+                  {balance >= 0 ? '+' : ''}{formatCurrency(toDisplay(balance), displayCurrency)}
                 </div>
                 <div className="text-[11px] text-muted-foreground mt-1 flex gap-2">
-                  <span>{t(locale, 'dashboard.paid')} {formatCurrency(paid, baseCurrency)}</span>
+                  <span>{t(locale, 'dashboard.paid')} {formatCurrency(toDisplay(paid), displayCurrency)}</span>
                   <span>·</span>
-                  <span>{t(locale, 'dashboard.owes')} {formatCurrency(owed, baseCurrency)}</span>
+                  <span>{t(locale, 'dashboard.owes')} {formatCurrency(toDisplay(owed), displayCurrency)}</span>
                 </div>
               </CardContent>
             </Card>
@@ -229,7 +240,7 @@ export default async function DashboardPage() {
                 <span className="text-xs text-muted-foreground font-medium">{t(locale, 'dashboard.totalSpent')}</span>
               </div>
               <div className="text-xl sm:text-2xl font-bold tracking-tight tabular-nums">
-                {formatCurrency(totalSpent, baseCurrency)}
+                {formatCurrency(toDisplay(totalSpent), displayCurrency)}
               </div>
               <div className="text-[11px] text-muted-foreground mt-1">
                 {expenseTotal} {t(locale, 'dashboard.expenses')} · {totalCrew} {t(locale, 'crews.crew')}
@@ -254,7 +265,7 @@ export default async function DashboardPage() {
                 const src = exp.paid_by_avatar
                   ? (exp.paid_by_avatar.startsWith('data:') || exp.paid_by_avatar.startsWith('http') ? exp.paid_by_avatar : `/${exp.paid_by_avatar}`)
                   : null;
-                const converted = exp.currency !== baseCurrency;
+                const showOriginal = exp.currency !== displayCurrency;
                 return (
                   <div key={exp.id} className="flex items-center gap-3 px-4 py-2.5">
                     <Avatar className="h-7 w-7 shrink-0">
@@ -271,11 +282,11 @@ export default async function DashboardPage() {
                     </div>
                     <div className="text-right shrink-0">
                       <div className="text-[13px] font-semibold tabular-nums">
-                        {converted ? formatCurrency(exp.amount, exp.currency) : formatCurrency(exp.amount_eur, baseCurrency)}
+                        {showOriginal ? formatCurrency(exp.amount, exp.currency) : formatCurrency(toDisplay(exp.amount_eur), displayCurrency)}
                       </div>
-                      {converted && (
+                      {showOriginal && (
                         <div className="text-[10px] text-muted-foreground tabular-nums">
-                          {formatCurrency(exp.amount_eur, baseCurrency)}
+                          {formatCurrency(toDisplay(exp.amount_eur), displayCurrency)}
                         </div>
                       )}
                     </div>

@@ -10,6 +10,8 @@
     "lint": "next lint",
     "db:init": "psql $DATABASE_URL < scripts/schema.sql && psql $DATABASE_URL < scripts/seed.sql",
     "db:reset": "bash scripts/reset-db.sh",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "test:currencies": "node scripts/test-currencies.mjs"
   },
   "keywords": [
@@ -41,5 +43,8 @@
     "tailwind-merge": "^3.5.0",
     "tailwindcss": "^4.2.2",
     "typescript": "^6.0.2"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.1"
   }
 }
