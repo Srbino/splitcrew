@@ -265,6 +265,8 @@ export default function WalletPage() {
       setCurrentRates(res.data.rates);
       setBaseCurrency(res.data.base_currency);
       setFormCurrency(res.data.base_currency);
+      const rate = res.data.rates[res.data.base_currency];
+      if (rate) setDisplayRate(rate);
     }
   };
 
