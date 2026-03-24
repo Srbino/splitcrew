@@ -73,7 +73,7 @@ export default async function CrewsPage() {
                       <Avatar size="lg">
                         {member.avatar ? (
                           <AvatarImage
-                            src={member.avatar.startsWith('/') ? member.avatar : `/${member.avatar}`}
+                            src={member.avatar.startsWith('data:') || member.avatar.startsWith('http') ? member.avatar : `/${member.avatar}`}
                             alt={member.name}
                           />
                         ) : null}

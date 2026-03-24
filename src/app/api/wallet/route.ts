@@ -108,8 +108,8 @@ async function handleList(
   const params: unknown[] = [];
 
   if (filter === 'mine') {
-    params.push(userId);
-    whereClause = `WHERE e.paid_by = $${params.length}`;
+    params.push(userId, userId);
+    whereClause = `WHERE (e.paid_by = $${params.length - 1} OR EXISTS (SELECT 1 FROM wallet_expense_splits wes WHERE wes.expense_id = e.id AND wes.user_id = $${params.length}))`;
   } else if (filter.startsWith('boat_')) {
     // Dynamic boat filter: boat_1, boat_2, boat_3, etc.
     // Handles both new format (split_type='1') and legacy format (split_type='boat1')
@@ -151,7 +151,7 @@ async function handleList(
 
   // Calculate total in base currency
   const totalResult = await queryOne<{ total: string }>(
-    `SELECT COALESCE(SUM(amount_eur), 0) AS total FROM wallet_expenses ${whereClause}`,
+    `SELECT COALESCE(SUM(e.amount_eur), 0) AS total FROM wallet_expenses e ${whereClause}`,
     params
   );
   const totalEur = parseFloat(totalResult?.total || '0');

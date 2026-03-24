@@ -185,12 +185,12 @@ export default async function DashboardPage() {
                   'text-xl sm:text-2xl font-bold tracking-tight tabular-nums',
                   balance >= 0 ? 'text-success' : 'text-destructive',
                 )}>
-                  {balance >= 0 ? '+' : ''}{formatMoney(balance)}
+                  {balance >= 0 ? '+' : ''}{formatCurrency(balance, baseCurrency)}
                 </div>
                 <div className="text-[11px] text-muted-foreground mt-1 flex gap-2">
-                  <span>{t(locale, 'dashboard.paid')} {formatMoney(paid)}</span>
+                  <span>{t(locale, 'dashboard.paid')} {formatCurrency(paid, baseCurrency)}</span>
                   <span>·</span>
-                  <span>{t(locale, 'dashboard.owes')} {formatMoney(owed)}</span>
+                  <span>{t(locale, 'dashboard.owes')} {formatCurrency(owed, baseCurrency)}</span>
                 </div>
               </CardContent>
             </Card>
@@ -229,7 +229,7 @@ export default async function DashboardPage() {
                 <span className="text-xs text-muted-foreground font-medium">{t(locale, 'dashboard.totalSpent')}</span>
               </div>
               <div className="text-xl sm:text-2xl font-bold tracking-tight tabular-nums">
-                {formatMoney(totalSpent)}
+                {formatCurrency(totalSpent, baseCurrency)}
               </div>
               <div className="text-[11px] text-muted-foreground mt-1">
                 {expenseTotal} {t(locale, 'dashboard.expenses')} · {totalCrew} {t(locale, 'crews.crew')}
@@ -252,7 +252,7 @@ export default async function DashboardPage() {
             <div className="divide-y divide-border">
               {recentExpenses.map(exp => {
                 const src = exp.paid_by_avatar
-                  ? (exp.paid_by_avatar.startsWith('/') ? exp.paid_by_avatar : `/${exp.paid_by_avatar}`)
+                  ? (exp.paid_by_avatar.startsWith('data:') || exp.paid_by_avatar.startsWith('http') ? exp.paid_by_avatar : `/${exp.paid_by_avatar}`)
                   : null;
                 const converted = exp.currency !== baseCurrency;
                 return (

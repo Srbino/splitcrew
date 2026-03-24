@@ -596,7 +596,9 @@ export default function ShoppingPage() {
               onChange={e => setFormCurrency(e.target.value)}
             >
               {(() => {
-                let codes = ['EUR', 'CZK', 'USD', 'GBP'];
+                const baseMeta = typeof document !== 'undefined' ? document.querySelector('meta[name="base-currency"]') : null;
+                const base = baseMeta?.getAttribute('content') || 'EUR';
+                let codes = [base];
                 if (typeof document !== 'undefined') {
                   try {
                     const m = document.querySelector('meta[name="allowed-currencies"]');

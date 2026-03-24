@@ -28,7 +28,7 @@ interface TopbarProps {
 export function Topbar({
   user, trip, theme, locale, onToggleTheme, onToggleLocale, onToggleMobileMenu, onLogout, onUploadAvatar,
 }: TopbarProps) {
-  const avatarSrc = user.avatar ? (user.avatar.startsWith('/') ? user.avatar : `/${user.avatar}`) : null;
+  const avatarSrc = user.avatar ? (user.avatar.startsWith('data:') || user.avatar.startsWith('http') ? user.avatar : `/${user.avatar}`) : null;
 
   const statusColors = {
     before: 'bg-primary/10 text-primary border-0',

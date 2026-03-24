@@ -66,7 +66,7 @@ export function UserDropdown({ user, theme, locale, onToggleTheme, onToggleLocal
     e.target.value = '';
   }
 
-  const avatarSrc = user.avatar ? (user.avatar.startsWith('/') ? user.avatar : `/${user.avatar}`) : null;
+  const avatarSrc = user.avatar ? (user.avatar.startsWith('data:') || user.avatar.startsWith('http') ? user.avatar : `/${user.avatar}`) : null;
 
   return (
     <>

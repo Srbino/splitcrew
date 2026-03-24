@@ -36,13 +36,20 @@ export async function GET() {
 
     // Get conversion rate from base → export currency
     let exportRate = 1;
+    let effectiveExportCurrency = baseCurrency;
     if (exportCurrency !== baseCurrency) {
       const { getExchangeRates } = await import('@/lib/exchange');
       const rates = await getExchangeRates(baseCurrency);
-      exportRate = rates[exportCurrency] || 1;
+      const rate = rates[exportCurrency];
+      if (rate && rate > 0) {
+        exportRate = rate;
+        effectiveExportCurrency = exportCurrency;
+      }
+      // If rate unavailable: keep exportRate=1 and effectiveExportCurrency=baseCurrency
+      // so CSV headers and values are always consistent
     }
     const toExport = (baseAmount: number) => exportRate === 1 ? baseAmount : Math.round(baseAmount * exportRate * 100) / 100;
-    const expCur = exportCurrency; // shorthand for headers
+    const expCur = effectiveExportCurrency; // shorthand for headers
 
     // ── Crew ──
     const users = await query<{

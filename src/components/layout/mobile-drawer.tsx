@@ -34,7 +34,7 @@ export function MobileDrawer({
 }: MobileDrawerProps) {
   const { t } = useI18n();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const avatarSrc = user.avatar ? (user.avatar.startsWith('/') ? user.avatar : `/${user.avatar}`) : null;
+  const avatarSrc = user.avatar ? (user.avatar.startsWith('data:') || user.avatar.startsWith('http') ? user.avatar : `/${user.avatar}`) : null;
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];

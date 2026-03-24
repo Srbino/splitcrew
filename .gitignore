@@ -34,3 +34,7 @@ public/expense_photos/*
 
 # database
 *.sqlite
+
+# real data seeds (never commit)
+scripts/rzvrep-seed.sql
+scripts/*-seed-real.sql

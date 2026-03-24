@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS users (
     name          VARCHAR(100) NOT NULL,
     phone         VARCHAR(50)  DEFAULT NULL,
     email         VARCHAR(150) DEFAULT NULL,
-    avatar        VARCHAR(200) DEFAULT NULL,
+    avatar        TEXT         DEFAULT NULL,
     password_hash VARCHAR(200) DEFAULT NULL,
     role          VARCHAR(20)  NOT NULL DEFAULT 'crew',
     boat_id       INT          NOT NULL DEFAULT 1,
