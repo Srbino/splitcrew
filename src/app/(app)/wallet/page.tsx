@@ -258,13 +258,14 @@ export default function WalletPage() {
   };
 
   const loadRates = async () => {
-    const res = await apiCall<{ base_currency: string; rates: Record<string, number> }>(
+    const res = await apiCall<{ base_currency: string; rates: Record<string, number>; display_rate: number }>(
       '/api/wallet?action=rate'
     );
     if (res.success && res.data) {
       setCurrentRates(res.data.rates);
       setBaseCurrency(res.data.base_currency);
       setFormCurrency(res.data.base_currency);
+      if (res.data.display_rate != null) setDisplayRate(res.data.display_rate);
     }
   };
 
@@ -280,7 +281,7 @@ export default function WalletPage() {
       setExpenses(res.data.expenses);
       setTotalEur(res.data.total_eur);
       setBaseCurrency(res.data.base_currency);
-      if (res.data.display_rate) setDisplayRate(res.data.display_rate);
+      if (res.data.display_rate != null) setDisplayRate(res.data.display_rate);
     }
     setLoadingExpenses(false);
   }, [filter]);
@@ -295,7 +296,7 @@ export default function WalletPage() {
     if (res.success && res.data) {
       setBalances(res.data.balances);
       setBaseCurrency(res.data.base_currency);
-      if (res.data.display_rate) setDisplayRate(res.data.display_rate);
+      if (res.data.display_rate != null) setDisplayRate(res.data.display_rate);
     }
     setLoadingBalances(false);
   }, []);
@@ -311,7 +312,7 @@ export default function WalletPage() {
     if (res.success && res.data) {
       setSettlements(res.data.settlements);
       setBaseCurrency(res.data.base_currency);
-      if (res.data.display_rate) setDisplayRate(res.data.display_rate);
+      if (res.data.display_rate != null) setDisplayRate(res.data.display_rate);
       setExchangeRates(res.data.exchange_rates);
     }
     setLoadingSettlements(false);

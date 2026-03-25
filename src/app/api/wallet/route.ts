@@ -397,7 +397,10 @@ async function handleRate() {
   } catch {
     // ignore
   }
-  return apiSuccess({ base_currency: displayCurrency, rates });
+  const displayRate = displayCurrency !== CANONICAL_CURRENCY
+    ? (rates[displayCurrency] ?? 1)
+    : 1;
+  return apiSuccess({ base_currency: displayCurrency, rates, display_rate: displayRate });
 }
 
 /**
