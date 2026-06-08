@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sailboat } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, getInitials, avatarColorClass } from '@/lib/utils';
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -22,6 +23,7 @@ interface UserOption {
   id: number;
   name: string;
   boat_name: string;
+  avatar: string | null;
 }
 
 export default function LoginPage() {
@@ -197,7 +199,15 @@ export default function LoginPage() {
                           <SelectContent>
                             {users.map(u => (
                               <SelectItem key={u.id} value={String(u.id)}>
-                                {u.name} ({u.boat_name || 'no boat'})
+                                <span className="flex items-center gap-2">
+                                  <Avatar className="size-6 shrink-0">
+                                    {u.avatar && <AvatarImage src={u.avatar} alt={u.name} />}
+                                    <AvatarFallback className={cn('text-[10px]', avatarColorClass(u.id))}>
+                                      {getInitials(u.name)}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <span>{u.name} ({u.boat_name || 'no boat'})</span>
+                                </span>
                               </SelectItem>
                             ))}
                           </SelectContent>
