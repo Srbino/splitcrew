@@ -4,6 +4,11 @@ import './globals.css';
 export const metadata: Metadata = {
   title: 'SplitCrew',
   description: 'Self-hosted trip management for sailing crews',
+  icons: {
+    // Clean, well-known URL — iOS picks this up reliably (the auto-generated
+    // app/apple-icon.png produced a hashed URL Safari ignored).
+    apple: '/apple-touch-icon.png',
+  },
   appleWebApp: {
     capable: true,
     title: 'SplitCrew',
