@@ -374,7 +374,7 @@ const en = {
     tripDateTo: 'End date',
     baseCurrency: 'Display currency',
     language: 'Language',
-    appIcon: 'App Icon (shown in topbar)',
+    appIcon: 'Logo color (shown in topbar)',
     passwords: 'Passwords',
     adminPasswordChange: 'Admin Password',
     newAdminPassword: 'New Admin Password',

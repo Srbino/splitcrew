@@ -376,7 +376,7 @@ const cs: Translations = {
     tripDateTo: 'Datum konce',
     baseCurrency: 'Zobrazovací měna',
     language: 'Jazyk',
-    appIcon: 'Ikona aplikace (zobrazena v horní liště)',
+    appIcon: 'Barva loga (zobrazeno v horní liště)',
     passwords: 'Hesla',
     adminPasswordChange: 'Admin heslo',
     newAdminPassword: 'Nové admin heslo',

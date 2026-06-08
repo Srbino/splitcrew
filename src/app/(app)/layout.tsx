@@ -24,7 +24,7 @@ export default async function AppLayout({
   const tripName = await getSetting('trip_name', 'SplitCrew');
   const tripFrom = await getSetting('trip_date_from', '');
   const tripTo = await getSetting('trip_date_to', '');
-  const appIcon = await getSetting('app_icon', '⛵');
+  const appIcon = await getSetting('app_icon', 'auto');
   const allowedCurrenciesJson = await getSetting('allowed_currencies', `["${baseCurrency}"]`);
   const allowedCurrencies = parseAllowedCurrencies(allowedCurrenciesJson, baseCurrency);
 

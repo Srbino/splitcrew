@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { cn, getInitials, avatarColorClass } from '@/lib/utils';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Logo } from '@/components/shared/logo';
+import { Logo, logoColorClass } from '@/components/shared/logo';
 import { UserDropdown } from './user-dropdown';
 import type { TripInfo } from './app-shell';
 
@@ -51,7 +51,7 @@ export function Topbar({
         href="/dashboard"
         className="flex items-center gap-2 font-semibold text-sm text-foreground no-underline hover:no-underline shrink-0 min-w-0"
       >
-        <Logo size={20} className="shrink-0 text-foreground" />
+        <Logo size={20} className={cn('shrink-0', logoColorClass(trip.appIcon))} />
         <span className="hidden sm:inline truncate max-w-[160px]">{trip.name}</span>
       </Link>
 

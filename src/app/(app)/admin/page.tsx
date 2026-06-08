@@ -18,6 +18,7 @@ import { Separator } from '@/components/ui/separator';
 import { cn, getInitials, avatarColorClass, formatDateTime } from '@/lib/utils';
 import { CURRENCY_CODES, CURRENCIES, formatCurrency } from '@/lib/currencies';
 import { LOCALES } from '@/lib/i18n';
+import { Logo, LOGO_COLORS, logoColorClass } from '@/components/shared/logo';
 import { useI18n } from '@/lib/i18n/context';
 
 // ── Types ──
@@ -52,7 +53,6 @@ const BOAT_COLORS = [
   { value: 'amber', label: 'Amber', tw: 'bg-amber-500' },
   { value: 'slate', label: 'Slate', tw: 'bg-slate-500' },
 ];
-const APP_ICONS = ['⛵', '🚢', '🌊', '⚓', '🏴‍☠️', '🗺️', '🧭', '🐬', '🌴', '☀️', '🏝️', '🎣'];
 
 interface SettingsData {
   trip_name: string;
@@ -163,7 +163,7 @@ export default function AdminPage() {
     trip_date_to: '',
     base_currency: 'EUR',
     language: 'en',
-    app_icon: '⛵',
+    app_icon: 'auto',
   });
   const [adminPassword, setAdminPassword] = useState('');
   const [settingsLoading, setSettingsLoading] = useState(true);
@@ -234,7 +234,7 @@ export default function AdminPage() {
         trip_date_to: res.data.trip_date_to,
         base_currency: res.data.base_currency,
         language: res.data.language,
-        app_icon: res.data.app_icon || '⛵',
+        app_icon: res.data.app_icon || 'auto',
       });
     }
     setSettingsLoading(false);
@@ -755,18 +755,23 @@ export default function AdminPage() {
                     <div className="space-y-2">
                       <Label>{t('admin.appIcon')}</Label>
                       <div className="flex flex-wrap gap-1.5">
-                        {APP_ICONS.map(icon => (
-                          <button key={icon} type="button"
-                            className={cn(
-                              'w-9 h-9 rounded-lg text-lg flex items-center justify-center transition-all border-none cursor-pointer',
-                              settings.app_icon === icon
-                                ? 'bg-primary/15 ring-2 ring-primary'
-                                : 'bg-muted/50 hover:bg-muted',
-                            )}
-                            onClick={() => setSettings(prev => ({ ...prev, app_icon: icon }))}>
-                            {icon}
-                          </button>
-                        ))}
+                        {LOGO_COLORS.map(({ token }) => {
+                          const selected =
+                            logoColorClass(settings.app_icon) === logoColorClass(token);
+                          return (
+                            <button key={token} type="button"
+                              title={token}
+                              className={cn(
+                                'w-9 h-9 rounded-lg flex items-center justify-center transition-all border-none cursor-pointer',
+                                selected
+                                  ? 'bg-primary/15 ring-2 ring-primary'
+                                  : 'bg-muted/50 hover:bg-muted',
+                              )}
+                              onClick={() => setSettings(prev => ({ ...prev, app_icon: token }))}>
+                              <Logo size={20} className={logoColorClass(token)} />
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
 
