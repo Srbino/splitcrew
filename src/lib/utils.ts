@@ -60,8 +60,11 @@ export function avatarColorClass(userId: number): string {
 }
 
 /** JSON API response helper */
-export function apiSuccess(data: unknown = null) {
-  return Response.json({ success: true, data });
+export function apiSuccess(
+  data: unknown = null,
+  init?: { headers?: Record<string, string> }
+) {
+  return Response.json({ success: true, data }, init);
 }
 
 export function apiError(error: string, status = 400) {

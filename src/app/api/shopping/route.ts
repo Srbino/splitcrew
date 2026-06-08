@@ -16,8 +16,10 @@ export async function GET(request: Request) {
 
       const items = await query(
         `SELECT si.*,
-                ua.name AS assigned_to_name, ua.avatar AS assigned_to_avatar,
-                ub.name AS bought_by_name, ub.avatar AS bought_by_avatar,
+                ua.name AS assigned_to_name,
+                CASE WHEN ua.avatar IS NOT NULL THEN '/api/avatar/' || ua.id ELSE NULL END AS assigned_to_avatar,
+                ub.name AS bought_by_name,
+                CASE WHEN ub.avatar IS NOT NULL THEN '/api/avatar/' || ub.id ELSE NULL END AS bought_by_avatar,
                 uc.name AS created_by_name
          FROM shopping_items si
          LEFT JOIN users ua ON si.assigned_to = ua.id

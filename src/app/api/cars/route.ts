@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
         driver_name: string;
         driver_avatar: string | null;
       }>(
-        `SELECT c.*, u.name AS driver_name, u.avatar AS driver_avatar
+        `SELECT c.*, u.name AS driver_name, CASE WHEN u.avatar IS NOT NULL THEN '/api/avatar/' || u.id ELSE NULL END AS driver_avatar
          FROM cars c
          LEFT JOIN users u ON c.driver_user_id = u.id
          ORDER BY c.id`
@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
         user_name: string;
         user_avatar: string | null;
       }>(
-        `SELECT cp.id, cp.car_id, cp.user_id, u.name AS user_name, u.avatar AS user_avatar
+        `SELECT cp.id, cp.car_id, cp.user_id, u.name AS user_name, CASE WHEN u.avatar IS NOT NULL THEN '/api/avatar/' || u.id ELSE NULL END AS user_avatar
          FROM car_passengers cp
          LEFT JOIN users u ON cp.user_id = u.id
          ORDER BY u.name`

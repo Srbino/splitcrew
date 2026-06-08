@@ -19,7 +19,7 @@
   /* Layout */
   --spacing-sidebar: 220px;
   --spacing-topbar: 52px;
-  --spacing-bottomnav: 60px;
+  --spacing-bottomnav: 64px;
 
   /* Shadows (light mode defaults) */
   --shadow-sm: 0 1px 3px oklch(0 0 0 / 0.06);

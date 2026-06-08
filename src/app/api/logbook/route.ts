@@ -15,7 +15,7 @@ export async function GET(request: Request) {
       if (!boatId) return apiError('boat_id is required');
 
       const entries = await query(
-        `SELECT l.*, u.name AS skipper_name, u.avatar AS skipper_avatar
+        `SELECT l.*, u.name AS skipper_name, CASE WHEN u.avatar IS NOT NULL THEN '/api/avatar/' || u.id ELSE NULL END AS skipper_avatar
          FROM logbook l
          LEFT JOIN users u ON l.skipper_user_id = u.id
          WHERE l.boat_id = $1

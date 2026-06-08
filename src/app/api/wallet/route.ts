@@ -119,7 +119,7 @@ async function handleList(
   }
 
   const expenses = await query<ExpenseRow>(
-    `SELECT e.*, u.name AS paid_by_name, u.avatar AS paid_by_avatar, u.boat_id AS paid_by_boat_id
+    `SELECT e.*, u.name AS paid_by_name, CASE WHEN u.avatar IS NOT NULL THEN '/api/avatar/' || u.id ELSE NULL END AS paid_by_avatar, u.boat_id AS paid_by_boat_id
      FROM wallet_expenses e
      LEFT JOIN users u ON e.paid_by = u.id
      ${whereClause}
@@ -226,7 +226,7 @@ async function handleBalances() {
     return {
       user_id: u.id,
       name: u.name,
-      avatar: u.avatar,
+      avatar: u.avatar ? `/api/avatar/${u.id}` : null,
       boat_id: u.boat_id,
       boat_name: u.boat_name,
       paid: Math.round(paid * 100) / 100,
@@ -651,7 +651,7 @@ async function handleEdit(
 
   // Load existing expense
   const existing = await queryOne<ExpenseRow>(
-    `SELECT e.*, u.name AS paid_by_name, u.avatar AS paid_by_avatar, u.boat_id AS paid_by_boat_id
+    `SELECT e.*, u.name AS paid_by_name, CASE WHEN u.avatar IS NOT NULL THEN '/api/avatar/' || u.id ELSE NULL END AS paid_by_avatar, u.boat_id AS paid_by_boat_id
      FROM wallet_expenses e
      LEFT JOIN users u ON e.paid_by = u.id
      WHERE e.id = $1`,
