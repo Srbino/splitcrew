@@ -10,10 +10,11 @@ Pokud je potřeba reset, použij: `psql $DATABASE_URL < scripts/rzvrep-seed.sql`
 
 ## Deployment
 
-Produkce běží na Vercel + Neon PostgreSQL.
-- App: https://crewsplit.advine.ai
-- Deploy: `npx vercel --prod`
+Produkce běží na Vercel (team `unifytechnology`) + Neon PostgreSQL.
+- App: https://crewsplit.vercel.app  (ostrý prod; doména advine.ai je opuštěná/NXDOMAIN)
+- Deploy: `npx vercel@latest --prod`  (lokální vercel CLI je zastaralá, používej @latest)
 - DB: Neon (ep-divine-fog-an9e2xax-pooler, us-east-1)
+- Git auto-deploy: repo Srbino/splitcrew je propojené, merge do `main` nasazuje automaticky
 
 ## Měny a kurzy
 
