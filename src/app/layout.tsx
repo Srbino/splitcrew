@@ -4,7 +4,6 @@ import './globals.css';
 export const metadata: Metadata = {
   title: 'SplitCrew',
   description: 'Self-hosted trip management for sailing crews',
-  icons: { icon: '/img/logo.png' },
 };
 
 export const viewport: Viewport = {

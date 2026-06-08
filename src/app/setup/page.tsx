@@ -3,8 +3,9 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sailboat, ArrowRight, ArrowLeft, Plus, Trash2, Check } from 'lucide-react';
+import { ArrowRight, ArrowLeft, Plus, Trash2, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Logo } from '@/components/shared/logo';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -137,7 +138,7 @@ export default function SetupPage() {
           <div className="px-6 pt-6 pb-4">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center text-2xl">
-                <Sailboat className="text-primary" size={28} />
+                <Logo className="text-foreground" size={28} />
               </div>
               <div>
                 <h1 className="text-xl font-bold">SplitCrew</h1>

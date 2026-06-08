@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sailboat } from 'lucide-react';
+import { Logo } from '@/components/shared/logo';
 import { cn, getInitials, avatarColorClass } from '@/lib/utils';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -134,7 +134,7 @@ export default function LoginPage() {
                 animate={{ scale: 1, opacity: 1 }}
                 transition={{ delay: 0.1, type: 'spring', damping: 15 }}
               >
-                <Sailboat size={32} className="text-primary" />
+                <Logo size={32} className="text-foreground" />
               </motion.div>
               <h1 className="text-2xl font-bold tracking-tight">SplitCrew</h1>
               <p className="text-sm text-muted-foreground mt-1">Sailing crew management</p>
