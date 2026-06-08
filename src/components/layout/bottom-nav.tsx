@@ -18,7 +18,7 @@ export function BottomNav({ activePage, onToggleMobileMenu }: BottomNavProps) {
       className={cn(
         'fixed bottom-0 left-0 right-0 z-40',
         'md:hidden flex items-end justify-around',
-        'bg-card/95 backdrop-blur-lg border-t border-border',
+        'bg-card/95 backdrop-blur-lg',
         'h-[var(--spacing-bottomnav)] pb-safe',
       )}
     >

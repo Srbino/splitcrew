@@ -191,7 +191,7 @@ export default function LoginPage() {
                       <div className="space-y-2">
                         <Label htmlFor="user-select">Select your name</Label>
                         <Select value={userId} onValueChange={setUserId} required>
-                          <SelectTrigger id="user-select">
+                          <SelectTrigger id="user-select" className="w-full">
                             <SelectValue placeholder="– select –" />
                           </SelectTrigger>
                           <SelectContent>
