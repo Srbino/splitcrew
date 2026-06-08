@@ -9,6 +9,11 @@ export const metadata: Metadata = {
     title: 'SplitCrew',
     statusBarStyle: 'black',
   },
+  // Next 16 only emits the standardized `mobile-web-app-capable`; older iOS
+  // Safari still keys off the legacy apple-prefixed tag for full-screen mode.
+  other: {
+    'apple-mobile-web-app-capable': 'yes',
+  },
 };
 
 export const viewport: Viewport = {
