@@ -42,7 +42,7 @@ describe('Canonical currency', () => {
 
 describe('Use Case 1: CZK expense (6000 CZK car reservation)', () => {
   const originalAmount = 6000;
-  const originalCurrency = 'CZK';
+  const originalCurrency: string = 'CZK';
 
   it('converts 6000 CZK to EUR for storage', () => {
     // rate = 1 EUR = 24.505 CZK → 6000 / 24.505 = 244.85 EUR
