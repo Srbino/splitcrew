@@ -16,36 +16,39 @@ export function BottomNav({ activePage, onToggleMobileMenu }: BottomNavProps) {
   return (
     <nav
       className={cn(
-        'fixed bottom-0 left-0 right-0 z-40',
-        'md:hidden flex items-stretch justify-around',
+        'fixed bottom-0 left-0 right-0 z-40 md:hidden',
         'bg-card/95 backdrop-blur-lg',
-        'h-[var(--spacing-bottomnav)] pb-safe',
+        // Safe-area padding sits BELOW the fixed-height row so the home
+        // indicator never eats into the icons/labels (standalone / Safari).
+        'pb-safe',
       )}
     >
-      {BOTTOM_NAV_ITEMS.map(item => {
-        const isActive = activePage === item.page;
-        return (
-          <Link
-            key={item.page}
-            href={item.href}
-            className={cn(
-              'flex flex-col items-center justify-center gap-0.5 flex-1 py-1.5',
-              'no-underline text-[10px] font-medium transition-colors',
-              isActive ? 'text-primary' : 'text-muted-foreground',
-            )}
-          >
-            <item.icon size={22} className={cn(isActive && 'scale-110')} />
-            <span>{t(item.labelKey)}</span>
-          </Link>
-        );
-      })}
-      <button
-        className="flex flex-col items-center justify-center gap-0.5 flex-1 py-1.5 text-[10px] font-medium text-muted-foreground bg-transparent border-none cursor-pointer"
-        onClick={onToggleMobileMenu}
-      >
-        <MORE_NAV_ITEM.icon size={22} />
-        <span>{t(MORE_NAV_ITEM.labelKey)}</span>
-      </button>
+      <div className="flex items-stretch justify-around h-[var(--spacing-bottomnav)]">
+        {BOTTOM_NAV_ITEMS.map(item => {
+          const isActive = activePage === item.page;
+          return (
+            <Link
+              key={item.page}
+              href={item.href}
+              className={cn(
+                'flex flex-col items-center justify-center gap-0.5 flex-1 py-1.5',
+                'no-underline text-[10px] font-medium transition-colors',
+                isActive ? 'text-primary' : 'text-muted-foreground',
+              )}
+            >
+              <item.icon size={22} className={cn(isActive && 'scale-110')} />
+              <span>{t(item.labelKey)}</span>
+            </Link>
+          );
+        })}
+        <button
+          className="flex flex-col items-center justify-center gap-0.5 flex-1 py-1.5 text-[10px] font-medium text-muted-foreground bg-transparent border-none cursor-pointer"
+          onClick={onToggleMobileMenu}
+        >
+          <MORE_NAV_ITEM.icon size={22} />
+          <span>{t(MORE_NAV_ITEM.labelKey)}</span>
+        </button>
+      </div>
     </nav>
   );
 }

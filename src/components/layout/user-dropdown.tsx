@@ -149,6 +149,11 @@ export function UserDropdown({ user, theme, locale, onToggleTheme, onToggleLocal
             <LogOut size={16} />
             <span>{t('auth.logout')}</span>
           </DropdownMenuItem>
+
+          <DropdownMenuSeparator />
+          <p className="px-2 py-1 text-[10px] text-muted-foreground/70 text-center select-none">
+            v{process.env.NEXT_PUBLIC_APP_VERSION}
+          </p>
         </DropdownMenuContent>
       </DropdownMenu>
 

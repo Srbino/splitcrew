@@ -156,6 +156,9 @@ export function MobileDrawer({
               <LogOut size={17} />
               <span>{t('auth.logout')}</span>
             </button>
+            <p className="px-3 pt-2 text-[11px] text-muted-foreground/70 text-center select-none">
+              v{process.env.NEXT_PUBLIC_APP_VERSION}
+            </p>
           </div>
         </SheetContent>
       </Sheet>
