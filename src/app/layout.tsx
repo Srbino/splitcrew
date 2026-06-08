@@ -4,6 +4,11 @@ import './globals.css';
 export const metadata: Metadata = {
   title: 'SplitCrew',
   description: 'Self-hosted trip management for sailing crews',
+  appleWebApp: {
+    capable: true,
+    title: 'SplitCrew',
+    statusBarStyle: 'black',
+  },
 };
 
 export const viewport: Viewport = {
