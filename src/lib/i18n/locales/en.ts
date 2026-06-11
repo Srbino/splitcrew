@@ -342,6 +342,7 @@ const en = {
     descriptionPlaceholder: "e.g. Make sure it's valid for 6 months",
     noItems: 'No checklist items yet. Tap + to add one.',
     confirmDelete: 'Are you sure you want to delete this item?',
+    copyToPersonal: 'Add to my items',
     scope: 'Scope',
     scopes: {
       personal: 'My Items',

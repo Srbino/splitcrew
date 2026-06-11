@@ -344,6 +344,7 @@ const cs: Translations = {
     descriptionPlaceholder: 'např. Zkontroluj platnost min. 6 měsíců',
     noItems: 'Zatím žádné položky. Klikni + pro přidání.',
     confirmDelete: 'Opravdu chceš smazat tuto položku?',
+    copyToPersonal: 'Přidat k mým věcem',
     scope: 'Rozsah',
     scopes: {
       personal: 'Moje věci',

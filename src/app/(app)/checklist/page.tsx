@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Edit2, Trash2, ShieldCheck, Shirt, Wrench, Star, Smartphone, Droplets, Heart, UtensilsCrossed, Gamepad2, User, Ship, Users } from 'lucide-react';
+import { Plus, Edit2, Trash2, ShieldCheck, Shirt, Wrench, Star, Smartphone, Droplets, Heart, UtensilsCrossed, Gamepad2, User, Ship, Users, UserPlus, Check } from 'lucide-react';
 import { Modal } from '@/components/shared/modal';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -95,6 +95,7 @@ export default function ChecklistPage() {
 
   const [deleteItemId, setDeleteItemId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
+  const [copiedIds, setCopiedIds] = useState<Set<number>>(new Set());
 
   const loadItems = useCallback(async () => {
     const res = await apiCall('/api/checklist?action=list&scope=' + activeScope);
@@ -157,6 +158,18 @@ export default function ChecklistPage() {
     if (res.success) {
       setDeleteItemId(null);
       loadItems();
+    } else {
+      alert(res.error);
+    }
+  }
+
+  async function handleCopyToPersonal(item: ChecklistItem) {
+    const res = await apiCall('/api/checklist', 'POST', {
+      action: 'copy_to_personal',
+      id: item.id,
+    });
+    if (res.success) {
+      setCopiedIds(prev => new Set(prev).add(item.id));
     } else {
       alert(res.error);
     }
@@ -270,6 +283,19 @@ export default function ChecklistPage() {
                               )}
                             </div>
                             <div className="flex gap-1 shrink-0 ml-2">
+                              {activeScope !== 'personal' && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon-xs"
+                                  className={copiedIds.has(item.id) ? 'text-success' : ''}
+                                  onClick={() => handleCopyToPersonal(item)}
+                                  disabled={copiedIds.has(item.id)}
+                                  title={t('checklist.copyToPersonal')}
+                                  aria-label={`${t('checklist.copyToPersonal')}: ${item.item_name}`}
+                                >
+                                  {copiedIds.has(item.id) ? <Check size={14} /> : <UserPlus size={14} />}
+                                </Button>
+                              )}
                               <Button
                                 variant="ghost"
                                 size="icon-xs"
