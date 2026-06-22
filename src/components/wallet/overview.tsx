@@ -1,7 +1,8 @@
 'use client';
 
+import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowRight, PieChart, Users, Receipt, TrendingUp } from 'lucide-react';
+import { ArrowRight, PieChart, Users, Receipt, TrendingUp, Table2 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { cn, getInitials, avatarColorClass } from '@/lib/utils';
@@ -17,10 +18,18 @@ export interface OweRow {
   to_user_id: number; to_name: string; to_avatar: string | null;
   amount: number; is_settled: boolean;
 }
+export interface MatrixRow { paid_by: number; name: string; avatar: string | null; byCat: Record<string, number>; total: number }
+export interface MatrixData {
+  categories: string[];
+  rows: MatrixRow[];
+  columnTotals: Record<string, number>;
+  grandTotal: number;
+}
 export interface SummaryData {
   summary: { total: number; count: number; avgPerExpense: number; topCategory: string | null };
   by_category: CategorySlice[];
   by_payer: PayerSlice[];
+  matrix?: MatrixData;
   settlements: OweRow[];
 }
 
@@ -132,6 +141,99 @@ function PayerBars({
   );
 }
 
+// ── Expense matrix: who paid what, per category, with filters ──
+
+const SELECT_CLS = 'h-8 rounded-md border border-input bg-transparent px-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring';
+
+function ExpenseMatrix({
+  matrix, toDisplay, baseCurrency, categoryLabel, t,
+}: {
+  matrix: MatrixData;
+  toDisplay: (eur: number) => number;
+  baseCurrency: string;
+  categoryLabel: (c: string) => string;
+  t: (key: string, params?: Record<string, string | number>) => string;
+}) {
+  const [person, setPerson] = useState<number | 'all'>('all');
+  const [category, setCategory] = useState<string>('all');
+
+  const cols = useMemo(
+    () => (category === 'all' ? matrix.categories : matrix.categories.filter(c => c === category)),
+    [matrix.categories, category],
+  );
+  const rows = useMemo(
+    () => (person === 'all' ? matrix.rows : matrix.rows.filter(r => r.paid_by === person)),
+    [matrix.rows, person],
+  );
+
+  // Totals recomputed over the *visible* cells
+  const colTotals = cols.map(c => rows.reduce((s, r) => s + (r.byCat[c] ?? 0), 0));
+  const rowTotal = (r: MatrixRow) => cols.reduce((s, c) => s + (r.byCat[c] ?? 0), 0);
+  const grand = colTotals.reduce((s, v) => s + v, 0);
+  const cell = (v: number) => (v > 0 ? formatCurrency(toDisplay(v), baseCurrency) : '—');
+
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
+          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+            <Table2 size={13} /> {t('wallet.matrixTitle')}
+          </h3>
+          <div className="flex gap-2">
+            <select className={SELECT_CLS} value={person} onChange={e => setPerson(e.target.value === 'all' ? 'all' : Number(e.target.value))}>
+              <option value="all">{t('wallet.matrixAllPeople')}</option>
+              {matrix.rows.map(r => <option key={r.paid_by} value={r.paid_by}>{r.name}</option>)}
+            </select>
+            <select className={SELECT_CLS} value={category} onChange={e => setCategory(e.target.value)}>
+              <option value="all">{t('wallet.matrixAllCategories')}</option>
+              {matrix.categories.map(c => <option key={c} value={c}>{categoryLabel(c)}</option>)}
+            </select>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto -mx-1 px-1">
+          <table className="w-full border-collapse text-sm" style={{ minWidth: cols.length > 3 ? 520 : undefined }}>
+            <thead>
+              <tr className="text-muted-foreground">
+                <th className="text-left font-medium py-2 pr-3 sticky left-0 bg-card">{t('wallet.name')}</th>
+                {cols.map(c => (
+                  <th key={c} className="text-right font-medium py-2 px-2 whitespace-nowrap">{categoryLabel(c)}</th>
+                ))}
+                <th className="text-right font-semibold py-2 pl-2">{t('wallet.matrixTotal')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(r => (
+                <tr key={r.paid_by} className="border-t border-border">
+                  <td className="py-2 pr-3 sticky left-0 bg-card">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Avi name={r.name} avatar={r.avatar} userId={r.paid_by} />
+                      <span className="truncate">{r.name}</span>
+                    </div>
+                  </td>
+                  {cols.map(c => (
+                    <td key={c} className="text-right py-2 px-2 tabular-nums whitespace-nowrap">{cell(r.byCat[c] ?? 0)}</td>
+                  ))}
+                  <td className="text-right py-2 pl-2 font-semibold tabular-nums whitespace-nowrap">{cell(rowTotal(r))}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="border-t-2 border-border font-semibold">
+                <td className="py-2 pr-3 sticky left-0 bg-card">{t('wallet.totalSpent')}</td>
+                {colTotals.map((v, i) => (
+                  <td key={cols[i]} className="text-right py-2 px-2 tabular-nums whitespace-nowrap">{cell(v)}</td>
+                ))}
+                <td className="text-right py-2 pl-2 tabular-nums whitespace-nowrap">{cell(grand)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ── Main overview ──
 
 export function WalletOverview({
@@ -192,6 +294,17 @@ export function WalletOverview({
           <PayerBars payers={by_payer} toDisplay={toDisplay} baseCurrency={baseCurrency} />
         </CardContent>
       </Card>
+
+      {/* Per-person × category matrix with filters */}
+      {data.matrix && data.matrix.rows.length > 0 && (
+        <ExpenseMatrix
+          matrix={data.matrix}
+          toDisplay={toDisplay}
+          baseCurrency={baseCurrency}
+          categoryLabel={categoryLabel}
+          t={t}
+        />
+      )}
 
       {/* Who owes whom */}
       <Card>

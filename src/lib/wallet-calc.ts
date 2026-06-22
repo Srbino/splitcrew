@@ -172,6 +172,54 @@ export function aggregateByPayer(expenses: ExpenseLike[]): PayerTotal[] {
     .sort((a, b) => b.total - a.total);
 }
 
+export interface PayerCategoryMatrix {
+  /** categories that actually have spend, ordered by total descending */
+  categories: string[];
+  /** one row per payer that has spend, ordered by row total descending */
+  rows: { paid_by: number; byCat: Record<string, number>; total: number }[];
+  /** total per category across everyone */
+  columnTotals: Record<string, number>;
+  /** total of everything */
+  grandTotal: number;
+}
+
+/**
+ * Cross-tab of how much each person PAID in each category — the "who spent what
+ * on fuel / food / …" table. Rows and category columns are sorted by total.
+ */
+export function aggregateByPayerCategory(expenses: ExpenseLike[]): PayerCategoryMatrix {
+  const catTotals = new Map<string, number>();
+  const rowMap = new Map<number, { byCat: Record<string, number>; total: number }>();
+
+  for (const e of expenses) {
+    catTotals.set(e.category, (catTotals.get(e.category) ?? 0) + e.amount_eur);
+    const row = rowMap.get(e.paid_by) ?? { byCat: {}, total: 0 };
+    row.byCat[e.category] = (row.byCat[e.category] ?? 0) + e.amount_eur;
+    row.total += e.amount_eur;
+    rowMap.set(e.paid_by, row);
+  }
+
+  const categories = [...catTotals.entries()].sort((a, b) => b[1] - a[1]).map(([c]) => c);
+
+  const rows = [...rowMap.entries()]
+    .map(([paid_by, r]) => {
+      const byCat: Record<string, number> = {};
+      for (const c of categories) byCat[c] = round2(r.byCat[c] ?? 0);
+      return { paid_by, byCat, total: round2(r.total) };
+    })
+    .sort((a, b) => b.total - a.total);
+
+  const columnTotals: Record<string, number> = {};
+  for (const c of categories) columnTotals[c] = round2(catTotals.get(c) ?? 0);
+
+  return {
+    categories,
+    rows,
+    columnTotals,
+    grandTotal: round2([...catTotals.values()].reduce((s, v) => s + v, 0)),
+  };
+}
+
 export interface Summary {
   total: number;
   count: number;
