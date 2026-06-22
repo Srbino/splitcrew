@@ -93,6 +93,8 @@ export function AppShell({ children, user, trip, csrfToken, baseCurrency, allowe
       <meta name="csrf-token" content={csrfToken} />
       <meta name="allowed-currencies" content={JSON.stringify(allowedCurrencies || [])} />
       <meta name="base-currency" content={baseCurrency || 'EUR'} />
+      <meta name="user-id" content={String(user.id || 0)} />
+      <meta name="is-admin" content={user.isAdmin ? '1' : '0'} />
 
       <Topbar
         user={user}

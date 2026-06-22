@@ -51,6 +51,16 @@ export default async function DashboardPage() {
     balance = paid - owed;
   }
 
+  // Wallet close status + pending approvals (for banner)
+  const walletStatus = await getSetting('wallet_status', 'open');
+  let pendingCount = 0;
+  if (isAdmin) {
+    const pc = await query<{ count: string }>(
+      `SELECT COUNT(*) as count FROM wallet_pending_expenses WHERE status = 'pending'`
+    );
+    pendingCount = parseInt(pc[0]?.count || '0');
+  }
+
   // Total spent + count
   const totalResult = await query<{ total: string; count: string }>(
     'SELECT COALESCE(SUM(amount_eur),0) as total, COUNT(*) as count FROM wallet_expenses'
@@ -175,6 +185,31 @@ export default async function DashboardPage() {
           </span>
         </div>
       </div>
+
+      {/* ── Wallet status banners ── */}
+      {walletStatus === 'closed' && (
+        <Link href="/wallet" className="no-underline block">
+          <div className="flex items-start gap-2.5 rounded-lg border border-amber-300/60 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800/50 px-4 py-3">
+            <Wallet size={16} className="text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+            <div className="text-sm">
+              <p className="font-semibold text-amber-800 dark:text-amber-300">{t(locale, 'wallet.walletClosedBanner')}</p>
+              <p className="text-amber-700/80 dark:text-amber-400/80 mt-0.5">
+                {isAdmin ? t(locale, 'wallet.closedHintAdmin') : t(locale, 'wallet.closedHintCrew')}
+              </p>
+            </div>
+          </div>
+        </Link>
+      )}
+      {isAdmin && pendingCount > 0 && (
+        <Link href="/wallet" className="no-underline block">
+          <div className="flex items-center gap-2.5 rounded-lg border border-blue-300/60 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-800/50 px-4 py-3">
+            <Receipt size={16} className="text-blue-600 dark:text-blue-400 shrink-0" />
+            <span className="text-sm font-medium text-blue-800 dark:text-blue-300">
+              {t(locale, 'wallet.pendingAlert', { count: pendingCount })}
+            </span>
+          </div>
+        </Link>
+      )}
 
       {/* ── Row 1: Balance + Total Spent — always side-by-side ── */}
       <div className="grid gap-3 grid-cols-2">
