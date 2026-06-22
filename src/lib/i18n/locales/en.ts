@@ -181,6 +181,8 @@ const en = {
     drillCost: 'What everyone paid for {{name}} (item by item)',
     drillPaid: '{{name}} paid these items',
     drillPaidBy: 'paid by',
+    willPay: '{{name}} pays',
+    willReceive: '{{name}} gets paid by',
     closeWallet: 'Close wallet',
     reopenWallet: 'Reopen',
     walletClosed: 'Wallet closed',

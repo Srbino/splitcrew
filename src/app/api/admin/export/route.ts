@@ -312,6 +312,8 @@ export async function GET() {
         paid: parseFloat(b.paid), share: parseFloat(b.share),
       }))),
       settlements: computeSettlements(calcBalances).map(s => ({
+        from_user_id: s.from_user_id,
+        to_user_id: s.to_user_id,
         from_name: nameById.get(s.from_user_id) || 'Unknown',
         to_name: nameById.get(s.to_user_id) || 'Unknown',
         amount: s.amount,
@@ -319,13 +321,13 @@ export async function GET() {
     };
 
     // Group the split detail per person (item-by-item, who paid)
-    const perPersonMap = new Map<string, { name: string; total: number; items: { date: string; description: string; paid_by_name: string; category: string; share: number }[] }>();
+    const perPersonMap = new Map<number, { user_id: number; name: string; total: number; items: { date: string; description: string; paid_by_name: string; category: string; share: number }[] }>();
     for (const d of splitDetail) {
-      const entry = perPersonMap.get(d.user_name) ?? { name: d.user_name, total: 0, items: [] };
+      const entry = perPersonMap.get(d.user_id) ?? { user_id: d.user_id, name: d.user_name, total: 0, items: [] };
       const share = parseFloat(d.share);
       entry.total += share;
       entry.items.push({ date: d.expense_date, description: d.description, paid_by_name: d.paid_by_name, category: d.category, share });
-      perPersonMap.set(d.user_name, entry);
+      perPersonMap.set(d.user_id, entry);
     }
     const perPerson = [...perPersonMap.values()]
       .map(p => ({ ...p, total: Math.round(p.total * 100) / 100 }))
@@ -387,9 +389,9 @@ function generateHtmlReport(data: {
       columnTotals: Record<string, number>;
       grandTotal: number;
     };
-    settlements: { from_name: string; to_name: string; amount: number }[];
+    settlements: { from_user_id: number; to_user_id: number; from_name: string; to_name: string; amount: number }[];
   };
-  perPerson: { name: string; total: number; items: { date: string; description: string; paid_by_name: string; category: string; share: number }[] }[];
+  perPerson: { user_id: number; name: string; total: number; items: { date: string; description: string; paid_by_name: string; category: string; share: number }[] }[];
 }): string {
   const { tripName, tripFrom, tripTo, storageCurrency, users, expenses, balances, settled, shopping, logbook, meals, totalExpenses, totalNm, overview, perPerson } = data;
 
@@ -421,16 +423,25 @@ ${segs.map((seg, i) => `<circle cx="80" cy="80" r="${R}" fill="none" stroke="${c
   const payerWidths = barScale(overview.byPayer.map(p => p.total));
   const payerBars = overview.byPayer.map((p, i) => `<div style="margin:8px 0"><div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px"><span>${p.name}</span><span style="font-variant-numeric:tabular-nums">${fmtMoney(p.total)} ${storageCurrency}</span></div><div style="height:8px;border-radius:4px;background:#eee;overflow:hidden"><div style="height:100%;width:${payerWidths[i]}%;background:#0A2540;border-radius:4px"></div></div></div>`).join('\n');
 
-  // Per-person itemised breakdown — "what everyone paid for me, item by item"
-  const perPersonHtml = perPerson.length === 0 ? '' : `
-<h2>🧑‍🤝‍🧑 Per-person breakdown</h2>
-<p class="subtitle">For each person: every item they share in, who paid it, and their share.</p>
-${perPerson.map(p => `
-<h3 style="font-size:15px;margin:20px 0 6px;color:#0A2540">${p.name} — <span style="color:#0d9668">${fmtMoney(p.total)} ${storageCurrency}</span></h3>
+  // Per-person itemised breakdown — "what everyone paid for me, item by item" + settlement
+  const personBlock = (p: typeof perPerson[number]) => {
+    const pays = overview.settlements.filter(s => s.from_user_id === p.user_id);
+    const gets = overview.settlements.filter(s => s.to_user_id === p.user_id);
+    const settleLine =
+      (pays.length ? `<div style="font-size:13px;margin:2px 0"><span style="color:#dc2626">Pays:</span> ${pays.map(s => `${s.to_name} (${fmtMoney(s.amount)} ${storageCurrency})`).join(', ')}</div>` : '') +
+      (gets.length ? `<div style="font-size:13px;margin:2px 0"><span style="color:#0d9668">Gets paid by:</span> ${gets.map(s => `${s.from_name} (${fmtMoney(s.amount)} ${storageCurrency})`).join(', ')}</div>` : '');
+    const rows = p.items.map(it => `<tr><td style="${tdStyle}">${fmtDate(it.date)}</td><td style="${tdStyle}">${it.description}</td><td style="${tdStyle}">${it.paid_by_name}</td><td style="${tdStyle}"><span class="badge">${it.category}</span></td><td style="${tdRight}">${fmtMoney(it.share)} ${storageCurrency}</td></tr>`).join('\n');
+    return `<h3 style="font-size:15px;margin:20px 0 6px;color:#0A2540">${p.name} — <span style="color:#0d9668">${fmtMoney(p.total)} ${storageCurrency}</span></h3>
+${settleLine}
 <table style="${tableStyle}">
 <tr><th style="${thStyle}">Date</th><th style="${thStyle}">Item</th><th style="${thStyle}">Paid by</th><th style="${thStyle}">Category</th><th style="${thStyle};text-align:right">Your share</th></tr>
-${p.items.map(it => `<tr><td style="${tdStyle}">${fmtDate(it.date)}</td><td style="${tdStyle}">${it.description}</td><td style="${tdStyle}">${it.paid_by_name}</td><td style="${tdStyle}"><span class="badge">${it.category}</span></td><td style="${tdRight}">${fmtMoney(it.share)} ${storageCurrency}</td></tr>`).join('\n')}
-</table>`).join('\n')}
+${rows}
+</table>`;
+  };
+  const perPersonHtml = perPerson.length === 0 ? '' : `
+<h2>🧑‍🤝‍🧑 Per-person breakdown</h2>
+<p class="subtitle">For each person: who they settle with, plus every item they share in.</p>
+${perPerson.map(personBlock).join('\n')}
 `;
 
   const overviewHtml = `

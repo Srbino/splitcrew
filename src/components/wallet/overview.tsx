@@ -161,11 +161,12 @@ function PayerBars({
 const SELECT_CLS = 'h-8 rounded-md border border-input bg-transparent px-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring';
 
 function ExpenseMatrix({
-  paidMatrix, costMatrix, expenses, toDisplay, baseCurrency, categoryLabel, t,
+  paidMatrix, costMatrix, expenses, settlements, toDisplay, baseCurrency, categoryLabel, t,
 }: {
   paidMatrix: MatrixData;
   costMatrix?: MatrixData;
   expenses?: ExpenseItem[];
+  settlements?: OweRow[];
   toDisplay: (eur: number) => number;
   baseCurrency: string;
   categoryLabel: (c: string) => string;
@@ -206,6 +207,10 @@ function ExpenseMatrix({
           .map(e => ({ id: e.id, description: e.description, by: e.paid_by_name, category: e.category, date: e.expense_date, amount: e.amount_eur }));
     return items.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   }, [person, mode, category, expenses]);
+
+  // Settlement perspective for the selected person
+  const outgoing = person === 'all' ? [] : (settlements ?? []).filter(s => s.from_user_id === person);
+  const incoming = person === 'all' ? [] : (settlements ?? []).filter(s => s.to_user_id === person);
 
   return (
     <Card>
@@ -277,6 +282,42 @@ function ExpenseMatrix({
             </tfoot>
           </table>
         </div>
+
+        {/* Settlement perspective for the selected person (with avatars) */}
+        {person !== 'all' && (outgoing.length > 0 || incoming.length > 0) && (
+          <div className="mt-4 pt-3 border-t border-border space-y-3">
+            {outgoing.length > 0 && (
+              <div>
+                <h4 className="text-xs font-semibold mb-2">{t('wallet.willPay', { name: selectedName })}</h4>
+                <div className="flex flex-col gap-1.5">
+                  {outgoing.map(s => (
+                    <div key={`o-${s.to_user_id}`} className="flex items-center gap-2.5 text-sm">
+                      <ArrowRight size={14} className="text-destructive shrink-0" />
+                      <Avi name={s.to_name} avatar={s.to_avatar} userId={s.to_user_id} />
+                      <span className="font-medium truncate">{s.to_name}</span>
+                      <span className="ml-auto font-bold tabular-nums text-destructive shrink-0">{formatCurrency(toDisplay(s.amount), baseCurrency)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {incoming.length > 0 && (
+              <div>
+                <h4 className="text-xs font-semibold mb-2">{t('wallet.willReceive', { name: selectedName })}</h4>
+                <div className="flex flex-col gap-1.5">
+                  {incoming.map(s => (
+                    <div key={`i-${s.from_user_id}`} className="flex items-center gap-2.5 text-sm">
+                      <Avi name={s.from_name} avatar={s.from_avatar} userId={s.from_user_id} />
+                      <span className="font-medium truncate">{s.from_name}</span>
+                      <ArrowRight size={14} className="text-green-600 dark:text-green-400 shrink-0" />
+                      <span className="ml-auto font-bold tabular-nums text-green-600 dark:text-green-400 shrink-0">{formatCurrency(toDisplay(s.amount), baseCurrency)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Item-by-item drill-down for the selected person */}
         {person !== 'all' && drillItems.length > 0 && (
@@ -398,6 +439,7 @@ export function WalletOverview({
           paidMatrix={data.matrix}
           costMatrix={data.matrix_cost}
           expenses={expenses}
+          settlements={data.settlements}
           toDisplay={toDisplay}
           baseCurrency={baseCurrency}
           categoryLabel={categoryLabel}
