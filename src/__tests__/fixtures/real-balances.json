@@ -1,0 +1,21 @@
+{
+  "_comment": "Real per-user paid/share in EUR pulled read-only from production on 2026-06-22 (Loď vol.5). Used to validate settlement correctness on real data.",
+  "totalEur": 6963.83,
+  "users": [
+    { "userId": 26, "name": "Ondra Svižný", "paid": 1373.00, "share": 702.01 },
+    { "userId": 4, "name": "Ondřej Kocurek", "paid": 751.86, "share": 475.70 },
+    { "userId": 2, "name": "Petr Janků", "paid": 723.09, "share": 486.20 },
+    { "userId": 1, "name": "Darek Hajdík", "paid": 672.63, "share": 487.69 },
+    { "userId": 9, "name": "Jiří Kokošinský", "paid": 630.10, "share": 448.15 },
+    { "userId": 7, "name": "Filip Zdráhal", "paid": 543.01, "share": 448.15 },
+    { "userId": 11, "name": "Lukáš Plíšek", "paid": 519.45, "share": 455.87 },
+    { "userId": 3, "name": "Erik Urban", "paid": 242.27, "share": 302.05 },
+    { "userId": 12, "name": "Pavel Navrátil", "paid": 301.90, "share": 437.99 },
+    { "userId": 16, "name": "Jaroslav Peška", "paid": 353.20, "share": 494.54 },
+    { "userId": 10, "name": "Petr Filák", "paid": 250.46, "share": 432.93 },
+    { "userId": 5, "name": "Pavel Srba", "paid": 282.18, "share": 470.00 },
+    { "userId": 13, "name": "Petr Mikulenka", "paid": 215.84, "share": 448.15 },
+    { "userId": 6, "name": "Alan David", "paid": 104.84, "share": 447.69 },
+    { "userId": 15, "name": "Tomáš Zicha", "paid": 0.00, "share": 426.71 }
+  ]
+}

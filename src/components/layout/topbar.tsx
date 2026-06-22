@@ -6,6 +6,7 @@ import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Logo, logoColorClass } from '@/components/shared/logo';
 import { UserDropdown } from './user-dropdown';
+import { NotificationBell } from './notification-bell';
 import type { TripInfo } from './app-shell';
 
 interface TopbarProps {
@@ -89,6 +90,9 @@ export function Topbar({
           {trip.dayLabel}
         </Badge>
       )}
+
+      {/* Notifications */}
+      <NotificationBell />
 
       {/* Desktop user dropdown */}
       <div className="hidden md:block shrink-0">

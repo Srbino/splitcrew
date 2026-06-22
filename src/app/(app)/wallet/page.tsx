@@ -5,7 +5,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus, Pencil, Trash2, Check, X, ArrowRight,
   Receipt, BarChart3, Handshake, RefreshCw, ChevronDown,
+  PieChart, Lock, Unlock, Clock, AlertCircle,
 } from 'lucide-react';
+import { WalletOverview, type SummaryData } from '@/components/wallet/overview';
 import { Modal } from '@/components/shared/modal';
 import { useToast } from '@/components/shared/toast';
 import { Button } from '@/components/ui/button';
@@ -89,6 +91,33 @@ interface AuditEntry {
   changed_at: string;
 }
 
+interface WalletStatus {
+  status: 'open' | 'closed';
+  closed_at: string | null;
+  closed_by: string | null;
+  pending_count: number;
+}
+
+interface PendingExpense {
+  id: number;
+  paid_by: number;
+  paid_by_name: string | null;
+  amount: number;
+  currency: string;
+  description: string;
+  category: string;
+  expense_date: string;
+  split_type: string;
+  split_user_ids: number[];
+  requested_by: number | null;
+  requested_by_name: string | null;
+  note: string | null;
+  status: 'pending' | 'approved' | 'rejected';
+  review_note: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+}
+
 // ── Helpers ──
 
 function getAllowedCurrencies(): string[] {
@@ -103,6 +132,16 @@ function getCsrfToken(): string {
   if (typeof document === 'undefined') return '';
   const meta = document.querySelector('meta[name="csrf-token"]');
   return meta?.getAttribute('content') || '';
+}
+
+function getIsAdmin(): boolean {
+  if (typeof document === 'undefined') return false;
+  return document.querySelector('meta[name="is-admin"]')?.getAttribute('content') === '1';
+}
+
+function getCurrentUserId(): number {
+  if (typeof document === 'undefined') return 0;
+  return parseInt(document.querySelector('meta[name="user-id"]')?.getAttribute('content') || '0') || 0;
 }
 
 async function apiCall<T = unknown>(
@@ -156,7 +195,7 @@ const cardVariants = {
 
 // ── Main Page Component ──
 
-type TabId = 'expenses' | 'balances' | 'settlements';
+type TabId = 'overview' | 'expenses' | 'balances' | 'settlements';
 
 interface BoatInfo {
   id: number;
@@ -169,6 +208,20 @@ export default function WalletPage() {
 
   // Tab state
   const [activeTab, setActiveTab] = useState<TabId>('expenses');
+
+  // Identity (from meta tags injected by AppShell)
+  const isAdmin = useMemo(() => getIsAdmin(), []);
+  const currentUserId = useMemo(() => getCurrentUserId(), []);
+
+  // Wallet close status + overview + pending approvals
+  const [walletStatus, setWalletStatus] = useState<WalletStatus>({ status: 'open', closed_at: null, closed_by: null, pending_count: 0 });
+  const [statusLoaded, setStatusLoaded] = useState(false);
+  const [summary, setSummary] = useState<SummaryData | null>(null);
+  const [loadingSummary, setLoadingSummary] = useState(false);
+  const [pending, setPending] = useState<PendingExpense[]>([]);
+  const [submitAsRequest, setSubmitAsRequest] = useState(false);
+  const [rejectingId, setRejectingId] = useState<number | null>(null);
+  const [rejectNote, setRejectNote] = useState('');
 
   // Boats (loaded dynamically)
   const [boats, setBoats] = useState<BoatInfo[]>([]);
@@ -223,11 +276,15 @@ export default function WalletPage() {
   useEffect(() => {
     loadUsers();
     loadRates();
+    loadStatus();
+    loadPending();
   }, []);
 
   // ── Load data when tab changes ──
   useEffect(() => {
-    if (activeTab === 'expenses') {
+    if (activeTab === 'overview') {
+      loadSummary();
+    } else if (activeTab === 'expenses') {
       loadExpenses();
     } else if (activeTab === 'balances') {
       loadBalances();
@@ -235,6 +292,34 @@ export default function WalletPage() {
       loadSettlements();
     }
   }, [activeTab, filter]);
+
+  const loadStatus = async () => {
+    const res = await apiCall<WalletStatus>('/api/wallet?action=status');
+    if (res.success && res.data) {
+      setWalletStatus(res.data);
+      // First load: if the wallet is closed, default to the overview tab
+      setStatusLoaded(prev => {
+        if (!prev && res.data!.status === 'closed') setActiveTab('overview');
+        return true;
+      });
+    }
+  };
+
+  const loadSummary = useCallback(async () => {
+    setLoadingSummary(true);
+    const res = await apiCall<SummaryData & { base_currency: string; display_rate: number }>('/api/wallet?action=summary');
+    if (res.success && res.data) {
+      setSummary(res.data);
+      setBaseCurrency(res.data.base_currency);
+      if (res.data.display_rate != null) setDisplayRate(res.data.display_rate);
+    }
+    setLoadingSummary(false);
+  }, []);
+
+  const loadPending = async () => {
+    const res = await apiCall<{ pending: PendingExpense[] }>('/api/wallet?action=list_pending');
+    if (res.success && res.data) setPending(res.data.pending);
+  };
 
   const loadUsers = async () => {
     const res = await apiCall<UserInfo[]>('/api/auth/users');
@@ -335,8 +420,9 @@ export default function WalletPage() {
   const openAddModal = useCallback(() => {
     resetForm();
     setFormSplitUsers(users.map(u => u.id));
+    setSubmitAsRequest(walletStatus.status === 'closed' && !isAdmin);
     setShowExpenseModal(true);
-  }, [resetForm, users]);
+  }, [resetForm, users, walletStatus.status, isAdmin]);
 
   const openEditModal = useCallback(
     (expense: Expense) => {
@@ -380,8 +466,11 @@ export default function WalletPage() {
 
     setFormSubmitting(true);
 
+    // When the wallet is closed, a non-admin submits a request for approval instead
+    const asRequest = !editingExpense && submitAsRequest;
+
     const payload = {
-      action: editingExpense ? 'edit' : 'add',
+      action: asRequest ? 'submit_pending' : (editingExpense ? 'edit' : 'add'),
       id: editingExpense?.id,
       paid_by: formPaidBy,
       amount: parseFloat(formAmount),
@@ -402,12 +491,62 @@ export default function WalletPage() {
 
     if (res.success) {
       showToast(
-        editingExpense ? t('wallet.expenseUpdated') : t('wallet.expenseAdded'),
+        asRequest ? t('wallet.requestSubmitted')
+          : editingExpense ? t('wallet.expenseUpdated') : t('wallet.expenseAdded'),
         'success'
       );
       setShowExpenseModal(false);
       resetForm();
-      loadExpenses();
+      if (asRequest) loadPending();
+      else loadExpenses();
+    } else {
+      showToast(res.error || 'Error', 'error');
+    }
+  };
+
+  const handleToggleClose = async () => {
+    const closing = walletStatus.status === 'open';
+    const res = await apiCall<WalletStatus>('/api/wallet', {
+      method: 'POST',
+      body: JSON.stringify({ action: closing ? 'close' : 'reopen' }),
+    });
+    if (res.success && res.data) {
+      setWalletStatus(res.data);
+      showToast(closing ? t('wallet.walletClosed') : t('wallet.walletReopened'), 'success');
+      if (closing) setActiveTab('overview');
+    } else {
+      showToast(res.error || 'Error', 'error');
+    }
+  };
+
+  const handleApprovePending = async (id: number) => {
+    const res = await apiCall('/api/wallet', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'approve_pending', id }),
+    });
+    if (res.success) {
+      showToast(t('wallet.requestApproved'), 'success');
+      loadPending();
+      loadStatus();
+      if (activeTab === 'overview') loadSummary();
+      if (activeTab === 'expenses') loadExpenses();
+    } else {
+      showToast(res.error || 'Error', 'error');
+    }
+  };
+
+  const handleRejectPending = async () => {
+    if (!rejectingId) return;
+    const res = await apiCall('/api/wallet', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'reject_pending', id: rejectingId, review_note: rejectNote.trim() || undefined }),
+    });
+    if (res.success) {
+      showToast(t('wallet.requestRejected'), 'success');
+      setRejectingId(null);
+      setRejectNote('');
+      loadPending();
+      loadStatus();
     } else {
       showToast(res.error || 'Error', 'error');
     }
@@ -531,7 +670,7 @@ export default function WalletPage() {
   return (
     <div>
       {/* Page header */}
-      <div className="flex items-center justify-between flex-wrap gap-3 mb-6">
+      <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">{t('wallet.title')}</h1>
           {totalEur > 0 && activeTab === 'expenses' && (
@@ -540,11 +679,50 @@ export default function WalletPage() {
             </p>
           )}
         </div>
+        {isAdmin && (
+          <Button
+            variant={walletStatus.status === 'closed' ? 'outline' : 'default'}
+            size="sm"
+            onClick={handleToggleClose}
+          >
+            {walletStatus.status === 'closed' ? <><Unlock size={15} /> {t('wallet.reopenWallet')}</> : <><Lock size={15} /> {t('wallet.closeWallet')}</>}
+          </Button>
+        )}
       </div>
+
+      {/* Status banner — wallet closed */}
+      {walletStatus.status === 'closed' && (
+        <div className="mb-4 flex items-start gap-2.5 rounded-lg border border-amber-300/60 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800/50 px-4 py-3">
+          <Lock size={16} className="text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+          <div className="text-sm">
+            <p className="font-semibold text-amber-800 dark:text-amber-300">
+              {t('wallet.walletClosedBanner')}
+              {walletStatus.closed_at ? ` · ${formatDate(walletStatus.closed_at)}` : ''}
+            </p>
+            <p className="text-amber-700/80 dark:text-amber-400/80 mt-0.5">
+              {isAdmin ? t('wallet.closedHintAdmin') : t('wallet.closedHintCrew')}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Admin: pending approvals alert */}
+      {isAdmin && walletStatus.pending_count > 0 && (
+        <button
+          onClick={() => setActiveTab('overview')}
+          className="mb-4 w-full flex items-center gap-2.5 rounded-lg border border-blue-300/60 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-800/50 px-4 py-3 text-left cursor-pointer"
+        >
+          <AlertCircle size={16} className="text-blue-600 dark:text-blue-400 shrink-0" />
+          <span className="text-sm font-medium text-blue-800 dark:text-blue-300">
+            {t('wallet.pendingAlert', { count: walletStatus.pending_count })}
+          </span>
+        </button>
+      )}
 
       {/* Tab navigation */}
       <div className="flex gap-1 mb-5 rounded-lg border border-border p-1 bg-muted/50" role="tablist">
         {([
+          { id: 'overview' as TabId, icon: PieChart, label: t('wallet.overview') },
           { id: 'expenses' as TabId, icon: Receipt, label: t('wallet.expenses') },
           { id: 'balances' as TabId, icon: BarChart3, label: t('wallet.balances') },
           { id: 'settlements' as TabId, icon: Handshake, label: t('wallet.settlements') },
@@ -569,6 +747,99 @@ export default function WalletPage() {
 
       {/* Tab content */}
       <div>
+        {activeTab === 'overview' && (
+          <div className="space-y-5">
+            {/* Admin: pending approval queue */}
+            {isAdmin && pending.filter(p => p.status === 'pending').length > 0 && (
+              <Card>
+                <CardContent className="p-4">
+                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3 flex items-center gap-1.5">
+                    <Clock size={13} /> {t('wallet.pendingApprovals')}
+                  </h3>
+                  <div className="flex flex-col gap-3">
+                    {pending.filter(p => p.status === 'pending').map(p => (
+                      <div key={p.id} className="rounded-lg border border-border p-3">
+                        <div className="flex items-start gap-3">
+                          <UserAvatar name={p.paid_by_name || '?'} avatar={null} userId={p.paid_by} />
+                          <div className="flex-1 min-w-0">
+                            <div className="font-semibold text-sm">{p.description}</div>
+                            <div className="text-xs text-muted-foreground mt-0.5">
+                              {p.paid_by_name} · {formatDate(p.expense_date)}
+                              {p.requested_by_name ? ` · ${t('wallet.requestedBy')}: ${p.requested_by_name}` : ''}
+                            </div>
+                            {p.note && <div className="text-xs italic text-muted-foreground mt-1">“{p.note}”</div>}
+                          </div>
+                          <div className="text-right shrink-0 font-semibold text-sm">
+                            {formatCurrency(p.amount, p.currency)}
+                          </div>
+                        </div>
+                        <div className="flex gap-2 justify-end mt-3">
+                          <Button variant="outline" size="sm" onClick={() => { setRejectingId(p.id); setRejectNote(''); }}>
+                            <X size={14} /> {t('wallet.reject')}
+                          </Button>
+                          <Button size="sm" onClick={() => handleApprovePending(p.id)}>
+                            <Check size={14} /> {t('wallet.approve')}
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Crew: my requests */}
+            {!isAdmin && pending.length > 0 && (
+              <Card>
+                <CardContent className="p-4">
+                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3 flex items-center gap-1.5">
+                    <Clock size={13} /> {t('wallet.myRequests')}
+                  </h3>
+                  <div className="flex flex-col gap-2">
+                    {pending.map(p => (
+                      <div key={p.id} className="flex items-center gap-3 text-sm">
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium truncate">{p.description}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {formatCurrency(p.amount, p.currency)} · {formatDate(p.expense_date)}
+                            {p.status === 'rejected' && p.review_note ? ` · ${p.review_note}` : ''}
+                          </div>
+                        </div>
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            'uppercase text-[0.6rem] font-bold shrink-0',
+                            p.status === 'pending' && 'border-amber-500 text-amber-600 dark:text-amber-400',
+                            p.status === 'approved' && 'border-green-500 text-green-600 dark:text-green-400',
+                            p.status === 'rejected' && 'border-destructive text-destructive',
+                          )}
+                        >
+                          {t(`wallet.status_${p.status}`)}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {loadingSummary && !summary ? (
+              <div className="text-center py-10 text-muted-foreground">
+                <RefreshCw size={24} className="animate-spin mx-auto" />
+                <p className="mt-2">{t('common.loading')}</p>
+              </div>
+            ) : (
+              <WalletOverview
+                data={summary}
+                toDisplay={toDisplay}
+                baseCurrency={baseCurrency}
+                categoryLabel={(c) => t(`wallet.categories.${c}`)}
+                t={t}
+              />
+            )}
+          </div>
+        )}
+
         {activeTab === 'expenses' && (
           <ExpensesTab
             expenses={expenses}
@@ -611,8 +882,8 @@ export default function WalletPage() {
         )}
       </div>
 
-      {/* FAB: Add expense */}
-      {activeTab === 'expenses' && (
+      {/* FAB: Add expense (or request when wallet is closed for crew) */}
+      {(activeTab === 'expenses' || activeTab === 'overview') && (
         <motion.button
           className="fixed bottom-24 right-5 md:bottom-8 z-40 w-12 h-12 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center border-none cursor-pointer"
           whileHover={{ scale: 1.1 }}
@@ -633,7 +904,7 @@ export default function WalletPage() {
           setShowExpenseModal(false);
           resetForm();
         }}
-        title={editingExpense ? t('wallet.editExpense') : t('wallet.addExpense')}
+        title={submitAsRequest ? t('wallet.requestExpense') : editingExpense ? t('wallet.editExpense') : t('wallet.addExpense')}
         size="lg"
         footer={
           <div className="flex gap-2 justify-end w-full">
@@ -650,11 +921,17 @@ export default function WalletPage() {
               onClick={handleSubmitExpense}
               disabled={formSubmitting}
             >
-              {formSubmitting ? t('common.loading') : t('common.save')}
+              {formSubmitting ? t('common.loading') : submitAsRequest ? t('wallet.sendRequest') : t('common.save')}
             </Button>
           </div>
         }
       >
+        {submitAsRequest && (
+          <div className="mb-4 flex items-start gap-2 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+            <AlertCircle size={14} className="mt-0.5 shrink-0" />
+            <span>{t('wallet.requestHint')}</span>
+          </div>
+        )}
         <ExpenseForm
           users={users}
           formPaidBy={formPaidBy}
@@ -725,6 +1002,35 @@ export default function WalletPage() {
         size="lg"
       >
         <AuditLogView logs={auditLogs} t={t} />
+      </Modal>
+
+      {/* Reject pending request modal */}
+      <Modal
+        isOpen={rejectingId !== null}
+        onClose={() => { setRejectingId(null); setRejectNote(''); }}
+        title={t('wallet.rejectRequest')}
+        size="sm"
+        footer={
+          <div className="flex gap-2 justify-end w-full">
+            <Button variant="outline" onClick={() => { setRejectingId(null); setRejectNote(''); }}>
+              {t('common.cancel')}
+            </Button>
+            <Button variant="destructive" onClick={handleRejectPending}>
+              {t('wallet.reject')}
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-2">
+          <Label>{t('wallet.rejectReason')}</Label>
+          <Input
+            type="text"
+            value={rejectNote}
+            onChange={e => setRejectNote(e.target.value)}
+            placeholder={t('wallet.rejectReasonPlaceholder')}
+            maxLength={200}
+          />
+        </div>
       </Modal>
     </div>
   );

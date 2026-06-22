@@ -40,3 +40,6 @@ scripts/rzvrep-seed.sql
 scripts/*-seed-real.sql
 rzvrep.sql
 *-dump.sql
+
+# Local DB backups (production data — never commit)
+backups/

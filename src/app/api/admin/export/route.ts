@@ -1,6 +1,7 @@
 import { getSession } from '@/lib/auth';
 import { query, getSetting } from '@/lib/db';
 import { apiError } from '@/lib/utils';
+import { computeBalances, computeSettlements, aggregateByCategory, aggregateByPayer, summarize, donutSegments, barScale } from '@/lib/wallet-calc';
 
 /**
  * Trip data export — generates CSV files for all trip data.
@@ -67,10 +68,10 @@ export async function GET() {
     const expenses = await query<{
       id: number; expense_date: string; description: string; amount: string;
       currency: string; amount_eur: string; exchange_rate: string | null;
-      paid_by_name: string; category: string; split_type: string;
+      paid_by: number; paid_by_name: string; category: string; split_type: string;
     }>(
       `SELECT e.id, e.expense_date, e.description, e.amount, e.currency,
-              e.amount_eur, e.exchange_rate, u.name as paid_by_name,
+              e.amount_eur, e.exchange_rate, e.paid_by, u.name as paid_by_name,
               e.category, e.split_type
        FROM wallet_expenses e JOIN users u ON e.paid_by = u.id
        ORDER BY e.expense_date`
@@ -108,9 +109,9 @@ export async function GET() {
 
     // ── Balances Summary ──
     const balances = await query<{
-      name: string; boat_name: string; paid: string; share: string;
+      id: number; name: string; boat_name: string; paid: string; share: string;
     }>(
-      `SELECT u.name, b.name as boat_name,
+      `SELECT u.id, u.name, b.name as boat_name,
               COALESCE((SELECT SUM(amount_eur) FROM wallet_expenses WHERE paid_by = u.id), 0) as paid,
               COALESCE((SELECT SUM(amount_eur) FROM wallet_expense_splits WHERE user_id = u.id), 0) as share
        FROM users u LEFT JOIN boats b ON u.boat_id = b.id
@@ -274,11 +275,31 @@ export async function GET() {
       `Exported: ${new Date().toISOString()}`,
     ].join('\n');
 
+    // ── Overview (charts + full who-owes-whom), computed in EUR ──
+    const expForCalc = expenses.map(e => ({
+      amount_eur: parseFloat(e.amount_eur), category: e.category, paid_by: e.paid_by,
+    }));
+    const nameById = new Map(balances.map(b => [b.id, b.name]));
+    const paidMap: Record<number, number> = {};
+    const shareMap: Record<number, number> = {};
+    for (const b of balances) { paidMap[b.id] = parseFloat(b.paid); shareMap[b.id] = parseFloat(b.share); }
+    const calcBalances = computeBalances(balances.map(b => b.id), paidMap, shareMap);
+    const overview = {
+      summary: summarize(expForCalc),
+      byCategory: aggregateByCategory(expForCalc),
+      byPayer: aggregateByPayer(expForCalc).map(p => ({ ...p, name: nameById.get(p.paid_by) || 'Unknown' })),
+      settlements: computeSettlements(calcBalances).map(s => ({
+        from_name: nameById.get(s.from_user_id) || 'Unknown',
+        to_name: nameById.get(s.to_user_id) || 'Unknown',
+        amount: s.amount,
+      })),
+    };
+
     // ── HTML Report ──
     const htmlReport = generateHtmlReport({
       tripName, tripFrom, tripTo, storageCurrency,
       users, expenses, balances, settled, shopping, logbook, meals,
-      totalExpenses, totalNm,
+      totalExpenses, totalNm, overview,
     });
 
     return Response.json({
@@ -319,8 +340,14 @@ function generateHtmlReport(data: {
   logbook: { date: string; boat_name: string; location_from: string; location_to: string; nautical_miles: string; skipper_name: string | null }[];
   meals: { date: string; boat_name: string; meal_type: string; cook_name: string | null; meal_description: string | null }[];
   totalExpenses: number; totalNm: number;
+  overview: {
+    summary: { total: number; count: number; avgPerExpense: number; topCategory: string | null };
+    byCategory: { category: string; total: number; count: number }[];
+    byPayer: { paid_by: number; total: number; count: number; name: string }[];
+    settlements: { from_name: string; to_name: string; amount: number }[];
+  };
 }): string {
-  const { tripName, tripFrom, tripTo, storageCurrency, users, expenses, balances, settled, shopping, logbook, meals, totalExpenses, totalNm } = data;
+  const { tripName, tripFrom, tripTo, storageCurrency, users, expenses, balances, settled, shopping, logbook, meals, totalExpenses, totalNm, overview } = data;
 
   const fmtDate = (d: string) => { try { return new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }); } catch { return d; } };
   const fmtMoney = (n: string | number) => Number(n).toFixed(2);
@@ -329,6 +356,48 @@ function generateHtmlReport(data: {
   const thStyle = 'text-align:left;padding:8px 12px;border-bottom:2px solid #ddd;font-weight:600;background:#f8f8f8';
   const tdStyle = 'padding:6px 12px;border-bottom:1px solid #eee';
   const tdRight = `${tdStyle};text-align:right;font-variant-numeric:tabular-nums`;
+
+  // ── Overview section (charts + who-owes-whom) ──
+  const CAT_COLORS: Record<string, string> = {
+    food: '#f59e0b', transport: '#3b82f6', marina: '#06b6d4', fuel: '#ef4444',
+    entertainment: '#a855f7', shopping: '#ec4899', accommodation: '#14b8a6', other: '#94a3b8',
+  };
+  const fallback = ['#6366f1', '#22c55e', '#eab308', '#f97316', '#0ea5e9'];
+  const catColor = (c: string, i: number) => CAT_COLORS[c] ?? fallback[i % fallback.length];
+
+  const R = 60, STROKE = 26, CIRC = 2 * Math.PI * R;
+  const catTotal = overview.byCategory.reduce((s, c) => s + c.total, 0);
+  const segs = donutSegments(overview.byCategory.map(c => c.total), { circumference: CIRC });
+  const donutSvg = `<svg width="150" height="150" viewBox="0 0 160 160" style="transform:rotate(-90deg)">
+<circle cx="80" cy="80" r="${R}" fill="none" stroke="#eee" stroke-width="${STROKE}"/>
+${segs.map((seg, i) => `<circle cx="80" cy="80" r="${R}" fill="none" stroke="${catColor(overview.byCategory[i].category, i)}" stroke-width="${STROKE}" stroke-dasharray="${seg.dash.toFixed(2)} ${(CIRC - seg.dash).toFixed(2)}" stroke-dashoffset="${(-seg.offset * CIRC).toFixed(2)}"/>`).join('\n')}
+</svg>`;
+  const donutLegend = overview.byCategory.map((c, i) => `<div style="display:flex;align-items:center;gap:8px;font-size:13px;margin:3px 0"><span style="width:11px;height:11px;border-radius:50%;background:${catColor(c.category, i)};display:inline-block"></span><span style="flex:1">${c.category}</span><span style="color:#666">${catTotal > 0 ? Math.round((c.total / catTotal) * 100) : 0}%</span><strong style="min-width:90px;text-align:right;font-variant-numeric:tabular-nums">${fmtMoney(c.total)} ${storageCurrency}</strong></div>`).join('\n');
+
+  const payerWidths = barScale(overview.byPayer.map(p => p.total));
+  const payerBars = overview.byPayer.map((p, i) => `<div style="margin:8px 0"><div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px"><span>${p.name}</span><span style="font-variant-numeric:tabular-nums">${fmtMoney(p.total)} ${storageCurrency}</span></div><div style="height:8px;border-radius:4px;background:#eee;overflow:hidden"><div style="height:100%;width:${payerWidths[i]}%;background:#0A2540;border-radius:4px"></div></div></div>`).join('\n');
+
+  const overviewHtml = `
+<h2>📊 Overview</h2>
+<div class="stats">
+  <div class="stat"><div class="stat-value">${fmtMoney(overview.summary.total)} ${storageCurrency}</div><div class="stat-label">Total Spent</div></div>
+  <div class="stat"><div class="stat-value">${fmtMoney(overview.summary.avgPerExpense)} ${storageCurrency}</div><div class="stat-label">Avg / Expense</div></div>
+  <div class="stat"><div class="stat-value">${overview.summary.count}</div><div class="stat-label">Expenses</div></div>
+  <div class="stat"><div class="stat-value">${overview.summary.topCategory ?? '—'}</div><div class="stat-label">Top Category</div></div>
+</div>
+<h3 style="font-size:14px;margin:24px 0 8px;color:#0A2540">By category</h3>
+<div style="display:flex;gap:24px;flex-wrap:wrap;align-items:center">
+  <div>${donutSvg}</div>
+  <div style="flex:1;min-width:240px">${donutLegend}</div>
+</div>
+<h3 style="font-size:14px;margin:24px 0 8px;color:#0A2540">By person</h3>
+${payerBars}
+<h3 style="font-size:14px;margin:24px 0 8px;color:#0A2540">Who owes whom</h3>
+${overview.settlements.length === 0 ? '<p style="color:#666;font-size:13px">All settled up.</p>' : `<p style="color:#666;font-size:12px;margin:0 0 8px">${overview.settlements.length} payment(s) settle everyone — the minimum needed.</p><table style="${tableStyle}">
+<tr><th style="${thStyle}">From</th><th style="${thStyle}">To</th><th style="${thStyle};text-align:right">Amount</th></tr>
+${overview.settlements.map(s => `<tr><td style="${tdStyle}">${s.from_name}</td><td style="${tdStyle}">${s.to_name}</td><td style="${tdRight}"><strong>${fmtMoney(s.amount)} ${storageCurrency}</strong></td></tr>`).join('\n')}
+</table>`}
+`;
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -362,7 +431,7 @@ function generateHtmlReport(data: {
   <div class="stat"><div class="stat-value">${expenses.length}</div><div class="stat-label">Expenses</div></div>
   <div class="stat"><div class="stat-value">${logbook.length}</div><div class="stat-label">Log Entries</div></div>
 </div>
-
+${overviewHtml}
 <h2>👥 Crew</h2>
 <table style="${tableStyle}">
 <tr><th style="${thStyle}">Name</th><th style="${thStyle}">Boat</th><th style="${thStyle}">Phone</th><th style="${thStyle}">Email</th></tr>

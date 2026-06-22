@@ -1,8 +1,10 @@
 import { getSession, requireCsrf } from '@/lib/auth';
-import { query, queryOne, execute, getSetting, getAllUsers, pool } from '@/lib/db';
+import { query, queryOne, execute, getSetting, setSetting, getAllUsers, pool } from '@/lib/db';
 import { apiSuccess, apiError } from '@/lib/utils';
 import { convertToBase, CANONICAL_CURRENCY } from '@/lib/currencies';
 import { getExchangeRate, getExchangeRates, getExchangeRateForDate, syncRatesForRange } from '@/lib/exchange';
+import { computeBalances, computeSettlements, aggregateByCategory, aggregateByPayer, summarize } from '@/lib/wallet-calc';
+import { notifyBroadcast, notifyUser } from '@/lib/notifications';
 
 // ── Types ──
 
@@ -87,6 +89,12 @@ export async function GET(request: Request) {
         return handleSyncRates();
       case 'full_audit':
         return handleFullAudit();
+      case 'status':
+        return handleStatus();
+      case 'summary':
+        return handleSummary();
+      case 'list_pending':
+        return handleListPending(session);
       default:
         return apiError('Unknown action');
     }
@@ -219,19 +227,19 @@ async function handleBalances() {
     shareMap[r.user_id] = parseFloat(r.total);
   }
 
+  const computed = computeBalances(users.map(u => u.id), paidMap, shareMap);
+  const computedById = new Map(computed.map(c => [c.userId, c]));
   const balances = users.map(u => {
-    const paid = paidMap[u.id] || 0;
-    const share = shareMap[u.id] || 0;
-    const balance = Math.round((paid - share) * 100) / 100;
+    const c = computedById.get(u.id)!;
     return {
       user_id: u.id,
       name: u.name,
       avatar: u.avatar ? `/api/avatar/${u.id}` : null,
       boat_id: u.boat_id,
       boat_name: u.boat_name,
-      paid: Math.round(paid * 100) / 100,
-      share: Math.round(share * 100) / 100,
-      balance,
+      paid: c.paid,
+      share: c.share,
+      balance: c.balance,
     };
   });
 
@@ -270,53 +278,9 @@ async function handleSettlements() {
     shareMap[r.user_id] = parseFloat(r.total);
   }
 
-  // Build debtors/creditors lists
-  const debtors: { userId: number; amount: number }[] = [];
-  const creditors: { userId: number; amount: number }[] = [];
-
-  for (const u of users) {
-    const paid = paidMap[u.id] || 0;
-    const share = shareMap[u.id] || 0;
-    const balance = Math.round((paid - share) * 100) / 100;
-    if (balance < -0.01) {
-      debtors.push({ userId: u.id, amount: Math.abs(balance) });
-    } else if (balance > 0.01) {
-      creditors.push({ userId: u.id, amount: balance });
-    }
-  }
-
-  // Sort descending by amount
-  debtors.sort((a, b) => b.amount - a.amount);
-  creditors.sort((a, b) => b.amount - a.amount);
-
-  // Greedy settlement algorithm
-  const settlements: {
-    from_user_id: number;
-    to_user_id: number;
-    amount: number;
-  }[] = [];
-
-  let di = 0;
-  let ci = 0;
-
-  while (di < debtors.length && ci < creditors.length) {
-    const amount = Math.min(debtors[di].amount, creditors[ci].amount);
-    const rounded = Math.round(amount * 100) / 100;
-
-    if (rounded > 0) {
-      settlements.push({
-        from_user_id: debtors[di].userId,
-        to_user_id: creditors[ci].userId,
-        amount: rounded,
-      });
-    }
-
-    debtors[di].amount = Math.round((debtors[di].amount - amount) * 100) / 100;
-    creditors[ci].amount = Math.round((creditors[ci].amount - amount) * 100) / 100;
-
-    if (debtors[di].amount < 0.01) di++;
-    if (creditors[ci].amount < 0.01) ci++;
-  }
+  // Compute balances + greedy settlements via the shared pure helpers
+  const balances = computeBalances(users.map(u => u.id), paidMap, shareMap);
+  const settlements = computeSettlements(balances);
 
   // Load settled status
   const settledRows = await query<SettledRow>('SELECT * FROM wallet_settled');
@@ -462,18 +426,46 @@ export async function POST(request: Request) {
     const action = body.action;
     // Admin has no userId — use null for FK-safe DB operations
     const userId = session.userId || null;
+    const isAdmin = !!session.isAdmin;
 
     switch (action) {
-      case 'add':
+      case 'add': {
+        // When the wallet is closed, non-admins must submit a request instead
+        if (!isAdmin && (await getSetting('wallet_status', 'open')) === 'closed') {
+          return apiError('Wallet is closed. Submit this expense for admin approval instead.', 409);
+        }
         return handleAdd(body, userId);
-      case 'edit':
+      }
+      case 'edit': {
+        if (!isAdmin && (await getSetting('wallet_status', 'open')) === 'closed') {
+          return apiError('Wallet is closed. Ask an admin to change this expense.', 409);
+        }
         return handleEdit(body, userId);
-      case 'delete':
+      }
+      case 'delete': {
+        if (!isAdmin && (await getSetting('wallet_status', 'open')) === 'closed') {
+          return apiError('Wallet is closed. Ask an admin to remove this expense.', 409);
+        }
         return handleDelete(body, userId);
+      }
       case 'settle': {
-        const role = session.isAdmin ? 'admin' : (session.role || 'crew');
+        const role = isAdmin ? 'admin' : (session.role || 'crew');
         return handleSettle(body, userId, role);
       }
+      case 'close':
+        if (!isAdmin) return apiError('Only an admin can close the wallet.', 403);
+        return handleClose(userId);
+      case 'reopen':
+        if (!isAdmin) return apiError('Only an admin can reopen the wallet.', 403);
+        return handleReopen();
+      case 'submit_pending':
+        return handleSubmitPending(body, userId);
+      case 'approve_pending':
+        if (!isAdmin) return apiError('Only an admin can approve.', 403);
+        return handleApprovePending(body, userId);
+      case 'reject_pending':
+        if (!isAdmin) return apiError('Only an admin can reject.', 403);
+        return handleRejectPending(body, userId);
       default:
         return apiError('Unknown action');
     }
@@ -521,89 +513,94 @@ async function handleAdd(
     return apiError('Date is required');
   }
 
+  try {
+    const expenseId = await insertExpenseWithSplits(
+      { paid_by, amount, currency, description, category, expense_date, split_type, split_users },
+      createdBy,
+    );
+    return apiSuccess({ id: expenseId });
+  } catch (err) {
+    if (err instanceof RateError) return apiError(err.message);
+    throw err;
+  }
+}
+
+/** Error thrown when an exchange rate can't be resolved. */
+class RateError extends Error {}
+
+interface ExpenseFields {
+  paid_by: number;
+  amount: number;
+  currency: string;
+  description: string;
+  category: string;
+  expense_date: string;
+  split_type: string;
+  split_users: number[];
+}
+
+/**
+ * Convert to EUR, insert the expense + per-person splits + a 'create' audit entry,
+ * all in one transaction. Shared by handleAdd and pending-expense approval.
+ */
+async function insertExpenseWithSplits(
+  fields: ExpenseFields,
+  createdBy: number | null,
+): Promise<number> {
+  const { paid_by, amount, currency, description, category = 'other', expense_date, split_type = 'both', split_users } = fields;
+
   const storageCurrency = CANONICAL_CURRENCY; // Always store in EUR
   let amountBase = amount;
   let exchangeRate: number | null = null;
 
-  // Parse the date first — we need it for date-specific exchange rate lookup
   const parsedDate = parseExpenseDate(expense_date);
   const expenseDateStr = parsedDate.slice(0, 10);
 
-  // Currency conversion — always convert to EUR for storage
   if (currency !== storageCurrency) {
     const rate = await getExchangeRateForDate(storageCurrency, currency, expenseDateStr);
     if (rate <= 0) {
-      return apiError(`Could not get exchange rate for ${currency} on ${expenseDateStr}`);
+      throw new RateError(`Could not get exchange rate for ${currency} on ${expenseDateStr}`);
     }
     exchangeRate = rate;
     amountBase = convertToBase(amount, rate);
   }
 
-  // Calculate splits
   const count = split_users.length;
   const perPerson = Math.floor((amountBase / count) * 100) / 100;
   const remainder = Math.round((amountBase - perPerson * count) * 100) / 100;
 
-  // Use a transaction
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
-    // Insert expense
     const expenseResult = await client.query(
       `INSERT INTO wallet_expenses
        (paid_by, amount, currency, amount_eur, exchange_rate, description, category, expense_date, split_type, created_by)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING id`,
-      [
-        paid_by,
-        amount,
-        currency,
-        amountBase,
-        exchangeRate,
-        description.trim(),
-        category,
-        parsedDate,
-        split_type,
-        createdBy,
-      ]
+      [paid_by, amount, currency, amountBase, exchangeRate, description.trim(), category, parsedDate, split_type, createdBy],
     );
-
     const expenseId = expenseResult.rows[0].id;
 
-    // Insert splits
     for (let i = 0; i < split_users.length; i++) {
       const splitAmount = i === 0 ? perPerson + remainder : perPerson;
       await client.query(
-        `INSERT INTO wallet_expense_splits (expense_id, user_id, amount_eur)
-         VALUES ($1, $2, $3)`,
-        [expenseId, split_users[i], splitAmount]
+        `INSERT INTO wallet_expense_splits (expense_id, user_id, amount_eur) VALUES ($1, $2, $3)`,
+        [expenseId, split_users[i], splitAmount],
       );
     }
 
-    // Create audit log entry
     const newValues = {
-      paid_by,
-      amount,
-      currency,
-      amount_eur: amountBase,
-      exchange_rate: exchangeRate,
-      description: description.trim(),
-      category,
-      expense_date: parsedDate,
-      split_type,
-      split_users,
+      paid_by, amount, currency, amount_eur: amountBase, exchange_rate: exchangeRate,
+      description: description.trim(), category, expense_date: parsedDate, split_type, split_users,
     };
-
     await client.query(
-      `INSERT INTO wallet_audit_log (expense_id, changed_by, change_type, new_values)
-       VALUES ($1, $2, 'create', $3)`,
-      [expenseId, createdBy, JSON.stringify(newValues)]
+      `INSERT INTO wallet_audit_log (expense_id, changed_by, change_type, new_values) VALUES ($1, $2, 'create', $3)`,
+      [expenseId, createdBy, JSON.stringify(newValues)],
     );
 
     await client.query('COMMIT');
-
-    return apiSuccess({ id: expenseId });
+    return expenseId;
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;
@@ -923,6 +920,302 @@ async function handleFullAudit() {
   );
 
   return apiSuccess({ expense_audits: expenseAudits, settlement_audits: settlementAudits });
+}
+
+// ── Wallet close / overview / approval ──
+
+async function getDisplayRate(baseCurrency: string): Promise<number> {
+  if (baseCurrency === CANONICAL_CURRENCY) return 1;
+  try {
+    const rates = await getExchangeRates(CANONICAL_CURRENCY);
+    return rates[baseCurrency] ?? 1;
+  } catch {
+    return 1;
+  }
+}
+
+async function handleStatus() {
+  const status = await getSetting('wallet_status', 'open');
+  const closedAt = await getSetting('wallet_closed_at', '');
+  const closedBy = await getSetting('wallet_closed_by', '');
+  const pendingRow = await queryOne<{ count: string }>(
+    `SELECT COUNT(*) AS count FROM wallet_pending_expenses WHERE status = 'pending'`,
+  );
+  return apiSuccess({
+    status,
+    closed_at: closedAt || null,
+    closed_by: closedBy || null,
+    pending_count: parseInt(pendingRow?.count || '0'),
+  });
+}
+
+/** Aggregated data for the overview tab + charts + full who-owes-whom. */
+async function handleSummary() {
+  const baseCurrency = await getSetting('base_currency', 'EUR');
+  const users = await getAllUsers();
+  const userMap = new Map(users.map(u => [u.id, u]));
+
+  const rawExpenses = await query<{ amount_eur: string; category: string; paid_by: number }>(
+    `SELECT amount_eur, category, paid_by FROM wallet_expenses`,
+  );
+  const expenses = rawExpenses.map(e => ({
+    amount_eur: parseFloat(e.amount_eur),
+    category: e.category,
+    paid_by: e.paid_by,
+  }));
+
+  const summary = summarize(expenses);
+  const byCategory = aggregateByCategory(expenses);
+  const byPayer = aggregateByPayer(expenses).map(p => ({
+    ...p,
+    name: userMap.get(p.paid_by)?.name || 'Unknown',
+    avatar: userMap.get(p.paid_by)?.avatar ? `/api/avatar/${p.paid_by}` : null,
+    boat_id: userMap.get(p.paid_by)?.boat_id ?? 0,
+  }));
+
+  // Full who-owes-whom (every outstanding transfer, not just the marked ones)
+  const paidRows = await query<{ paid_by: number; total: string }>(
+    `SELECT paid_by, COALESCE(SUM(amount_eur), 0) AS total FROM wallet_expenses GROUP BY paid_by`,
+  );
+  const paidMap: Record<number, number> = {};
+  for (const r of paidRows) paidMap[r.paid_by] = parseFloat(r.total);
+  const shareRows = await query<{ user_id: number; total: string }>(
+    `SELECT user_id, COALESCE(SUM(amount_eur), 0) AS total FROM wallet_expense_splits GROUP BY user_id`,
+  );
+  const shareMap: Record<number, number> = {};
+  for (const r of shareRows) shareMap[r.user_id] = parseFloat(r.total);
+
+  const balances = computeBalances(users.map(u => u.id), paidMap, shareMap);
+  const settledRows = await query<SettledRow>('SELECT * FROM wallet_settled');
+  const settledSet = new Set(settledRows.map(r => `${r.from_user_id}-${r.to_user_id}`));
+  const settlements = computeSettlements(balances).map(s => ({
+    from_user_id: s.from_user_id,
+    from_name: userMap.get(s.from_user_id)?.name || 'Unknown',
+    from_avatar: userMap.get(s.from_user_id)?.avatar ? `/api/avatar/${s.from_user_id}` : null,
+    to_user_id: s.to_user_id,
+    to_name: userMap.get(s.to_user_id)?.name || 'Unknown',
+    to_avatar: userMap.get(s.to_user_id)?.avatar ? `/api/avatar/${s.to_user_id}` : null,
+    amount: s.amount,
+    is_settled: settledSet.has(`${s.from_user_id}-${s.to_user_id}`),
+  }));
+
+  return apiSuccess({
+    summary,
+    by_category: byCategory,
+    by_payer: byPayer,
+    settlements,
+    base_currency: baseCurrency,
+    display_rate: await getDisplayRate(baseCurrency),
+  });
+}
+
+interface PendingRow {
+  id: number;
+  paid_by: number;
+  amount: string;
+  currency: string;
+  description: string;
+  category: string;
+  expense_date: string;
+  split_type: string;
+  split_user_ids: string;
+  requested_by: number | null;
+  note: string | null;
+  status: string;
+  review_note: string | null;
+  reviewed_by: number | null;
+  reviewed_at: string | null;
+  created_at: string;
+  paid_by_name: string | null;
+  requested_by_name: string | null;
+}
+
+async function handleListPending(session: { userId?: number; isAdmin?: boolean }) {
+  const isAdmin = !!session.isAdmin;
+  const params: unknown[] = [];
+  let whereClause = `WHERE p.status = 'pending'`;
+  if (!isAdmin) {
+    params.push(session.userId || 0);
+    whereClause = `WHERE p.requested_by = $1`; // members see all their own requests (any status)
+  }
+  const rows = await query<PendingRow>(
+    `SELECT p.*, pu.name AS paid_by_name, ru.name AS requested_by_name
+     FROM wallet_pending_expenses p
+     LEFT JOIN users pu ON p.paid_by = pu.id
+     LEFT JOIN users ru ON p.requested_by = ru.id
+     ${whereClause}
+     ORDER BY p.created_at DESC`,
+    params,
+  );
+  const pending = rows.map(r => ({
+    id: r.id,
+    paid_by: r.paid_by,
+    paid_by_name: r.paid_by_name,
+    amount: parseFloat(r.amount),
+    currency: r.currency,
+    description: r.description,
+    category: r.category,
+    expense_date: r.expense_date,
+    split_type: r.split_type,
+    split_user_ids: safeParseIds(r.split_user_ids),
+    requested_by: r.requested_by,
+    requested_by_name: r.requested_by_name,
+    note: r.note,
+    status: r.status,
+    review_note: r.review_note,
+    reviewed_at: r.reviewed_at,
+    created_at: r.created_at,
+  }));
+  return apiSuccess({ pending });
+}
+
+async function handleClose(closedBy: number | null) {
+  const current = await getSetting('wallet_status', 'open');
+  if (current === 'closed') {
+    return handleStatus(); // idempotent — keep original closed_at
+  }
+  const now = new Date().toISOString();
+  await setSetting('wallet_status', 'closed');
+  await setSetting('wallet_closed_at', now);
+  await setSetting('wallet_closed_by', closedBy ? String(closedBy) : 'admin');
+
+  await notifyBroadcast(
+    'wallet_closed',
+    'Peněženka byla uzavřena',
+    'Výlet je vyúčtovaný. Podívej se na přehled a kdo komu dluží. Zapomněl jsi výdaj? Pošli ho ke schválení adminovi.',
+    '/wallet',
+  );
+  return handleStatus();
+}
+
+async function handleReopen() {
+  await setSetting('wallet_status', 'open');
+  await setSetting('wallet_closed_at', '');
+  await setSetting('wallet_closed_by', '');
+  await notifyBroadcast(
+    'wallet_reopened',
+    'Peněženka je opět otevřená',
+    'Admin znovu otevřel peněženku — můžeš normálně přidávat výdaje.',
+    '/wallet',
+  );
+  return handleStatus();
+}
+
+async function handleSubmitPending(
+  body: {
+    paid_by: number; amount: number; currency: string; description: string;
+    category?: string; expense_date: string; split_type: string;
+    split_users: number[]; note?: string;
+  },
+  requestedBy: number | null,
+) {
+  const { paid_by, amount, currency, description, category = 'other', expense_date, split_type = 'both', split_users, note } = body;
+  if (!paid_by || !amount || amount <= 0) return apiError('Amount and payer are required');
+  if (!description || !description.trim()) return apiError('Description is required');
+  if (!split_users || split_users.length === 0) return apiError('Select at least one person to split with');
+  if (!expense_date) return apiError('Date is required');
+
+  const parsedDate = parseExpenseDate(expense_date);
+  const row = await queryOne<{ id: number }>(
+    `INSERT INTO wallet_pending_expenses
+     (paid_by, amount, currency, description, category, expense_date, split_type, split_user_ids, requested_by, note)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`,
+    [paid_by, amount, currency, description.trim(), category, parsedDate, split_type, JSON.stringify(split_users), requestedBy, note?.trim() || null],
+  );
+
+  const requester = requestedBy ? await queryOne<{ name: string }>('SELECT name FROM users WHERE id = $1', [requestedBy]) : null;
+  await notifyBroadcast(
+    'expense_pending',
+    'Nová žádost o výdaj ke schválení',
+    `${requester?.name || 'Někdo'} přidal výdaj „${description.trim()}" (${amount} ${currency}) po uzavření peněženky.`,
+    '/wallet',
+  );
+  return apiSuccess({ id: row?.id });
+}
+
+async function handleApprovePending(body: { id: number }, reviewedBy: number | null) {
+  const { id } = body;
+  if (!id) return apiError('Missing id');
+  const pending = await queryOne<PendingRow>(
+    `SELECT * FROM wallet_pending_expenses WHERE id = $1`, [id],
+  );
+  if (!pending) return apiError('Request not found', 404);
+  if (pending.status !== 'pending') return apiError('This request was already reviewed.');
+
+  let expenseId: number;
+  try {
+    expenseId = await insertExpenseWithSplits(
+      {
+        paid_by: pending.paid_by,
+        amount: parseFloat(pending.amount),
+        currency: pending.currency,
+        description: pending.description,
+        category: pending.category,
+        expense_date: pending.expense_date,
+        split_type: pending.split_type,
+        split_users: safeParseIds(pending.split_user_ids),
+      },
+      reviewedBy,
+    );
+  } catch (err) {
+    if (err instanceof RateError) return apiError(err.message);
+    throw err;
+  }
+
+  await execute(
+    `UPDATE wallet_pending_expenses
+     SET status = 'approved', reviewed_by = $1, reviewed_at = CURRENT_TIMESTAMP, approved_expense_id = $2
+     WHERE id = $3`,
+    [reviewedBy, expenseId, id],
+  );
+
+  if (pending.requested_by) {
+    await notifyUser(
+      pending.requested_by,
+      'expense_approved',
+      'Tvůj dodatečný výdaj byl schválen',
+      `„${pending.description}" (${pending.amount} ${pending.currency}) byl přidán do peněženky.`,
+      '/wallet',
+    );
+  }
+  return apiSuccess({ id, expense_id: expenseId });
+}
+
+async function handleRejectPending(body: { id: number; review_note?: string }, reviewedBy: number | null) {
+  const { id, review_note } = body;
+  if (!id) return apiError('Missing id');
+  const pending = await queryOne<PendingRow>(
+    `SELECT * FROM wallet_pending_expenses WHERE id = $1`, [id],
+  );
+  if (!pending) return apiError('Request not found', 404);
+  if (pending.status !== 'pending') return apiError('This request was already reviewed.');
+
+  await execute(
+    `UPDATE wallet_pending_expenses
+     SET status = 'rejected', reviewed_by = $1, reviewed_at = CURRENT_TIMESTAMP, review_note = $2
+     WHERE id = $3`,
+    [reviewedBy, review_note?.trim() || null, id],
+  );
+
+  if (pending.requested_by) {
+    await notifyUser(
+      pending.requested_by,
+      'expense_rejected',
+      'Tvůj dodatečný výdaj byl zamítnut',
+      `„${pending.description}" (${pending.amount} ${pending.currency})${review_note?.trim() ? ` — ${review_note.trim()}` : ''}.`,
+      '/wallet',
+    );
+  }
+  return apiSuccess({ id });
+}
+
+function safeParseIds(json: string): number[] {
+  try {
+    const arr = JSON.parse(json);
+    return Array.isArray(arr) ? arr.map(Number).filter(n => !isNaN(n)) : [];
+  } catch {
+    return [];
+  }
 }
 
 // ── Helpers ──
