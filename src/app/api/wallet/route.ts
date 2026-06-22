@@ -3,7 +3,7 @@ import { query, queryOne, execute, getSetting, setSetting, getAllUsers, pool } f
 import { apiSuccess, apiError } from '@/lib/utils';
 import { convertToBase, CANONICAL_CURRENCY } from '@/lib/currencies';
 import { getExchangeRate, getExchangeRates, getExchangeRateForDate, syncRatesForRange } from '@/lib/exchange';
-import { computeBalances, computeSettlements, aggregateByCategory, aggregateByPayer, aggregateByPayerCategory, aggregateByBoat, summarize } from '@/lib/wallet-calc';
+import { computeBalances, computeSettlements, aggregateByCategory, aggregateByPayer, aggregateByPayerCategory, aggregateByBoat, planBulkCharge, summarize } from '@/lib/wallet-calc';
 import { notifyBroadcast, notifyUser } from '@/lib/notifications';
 
 // ── Types ──
@@ -466,6 +466,9 @@ export async function POST(request: Request) {
       case 'reject_pending':
         if (!isAdmin) return apiError('Only an admin can reject.', 403);
         return handleRejectPending(body, userId);
+      case 'bulk_add':
+        if (!isAdmin) return apiError('Only an admin can do a bulk charge.', 403);
+        return handleBulkAdd(body, userId);
       default:
         return apiError('Unknown action');
     }
@@ -1241,6 +1244,54 @@ async function handleRejectPending(body: { id: number; review_note?: string }, r
     );
   }
   return apiSuccess({ id });
+}
+
+/**
+ * Bulk charge (admin) — one logical cost fronted by many payers, all charged to
+ * the same beneficiaries. Generates one expense per payer (each paid_by that
+ * payer, split among the beneficiaries) so the beneficiaries end up owing them.
+ */
+async function handleBulkAdd(
+  body: {
+    description: string; category?: string; expense_date: string; currency: string;
+    amount: number; payers: number[]; split_users: number[];
+  },
+  createdBy: number | null,
+) {
+  const { description, category = 'other', expense_date, currency, amount, payers, split_users } = body;
+  if (!description || !description.trim()) return apiError('Description is required');
+  if (!(amount > 0)) return apiError('Amount per payer must be greater than zero');
+  if (!expense_date) return apiError('Date is required');
+  if (!payers || payers.length === 0) return apiError('Select at least one payer');
+  if (!split_users || split_users.length === 0) return apiError('Select who the cost is charged to');
+
+  const plan = planBulkCharge(payers, amount, split_users);
+  if (plan.length === 0) return apiError('Nothing to charge — check payers and beneficiaries');
+
+  const createdIds: number[] = [];
+  try {
+    for (const item of plan) {
+      const id = await insertExpenseWithSplits(
+        {
+          paid_by: item.paid_by,
+          amount: item.amount,
+          currency,
+          description: description.trim(),
+          category,
+          expense_date,
+          split_type: 'both',
+          split_users: item.split_users,
+        },
+        createdBy,
+      );
+      createdIds.push(id);
+    }
+  } catch (err) {
+    if (err instanceof RateError) return apiError(err.message);
+    throw err;
+  }
+
+  return apiSuccess({ created: createdIds.length, ids: createdIds });
 }
 
 function safeParseIds(json: string): number[] {

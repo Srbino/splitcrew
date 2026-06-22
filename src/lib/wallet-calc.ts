@@ -220,6 +220,34 @@ export function aggregateByPayerCategory(expenses: ExpenseLike[]): PayerCategory
   };
 }
 
+export interface BulkChargePlan {
+  paid_by: number;
+  amount: number;
+  split_users: number[];
+}
+
+/**
+ * Plan a bulk charge: each payer fronts `amountPerPayer`, all going to the same
+ * set of beneficiaries (who bear the cost). Generates one expense per payer.
+ *
+ * Example — "Svižný didn't pay; 14 people each covered 723 for him":
+ *   planBulkCharge([…14 ids…], 723, [svižnýId])
+ *   → 14 expenses, each paid_by a different person, split only to Svižný,
+ *     so Svižný ends up owing each of them 723.
+ *
+ * Returns [] if the inputs can't form a valid charge.
+ */
+export function planBulkCharge(
+  payers: number[],
+  amountPerPayer: number,
+  beneficiaries: number[],
+): BulkChargePlan[] {
+  const split = [...new Set(beneficiaries)].filter(n => Number.isFinite(n));
+  const uniquePayers = [...new Set(payers)].filter(n => Number.isFinite(n));
+  if (split.length === 0 || uniquePayers.length === 0 || !(amountPerPayer > 0)) return [];
+  return uniquePayers.map(paid_by => ({ paid_by, amount: amountPerPayer, split_users: split }));
+}
+
 export interface BoatTotal {
   boat_id: number;
   boat_name: string;

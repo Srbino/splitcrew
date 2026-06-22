@@ -12,6 +12,7 @@ import {
   aggregateByPayer,
   aggregateByPayerCategory,
   aggregateByBoat,
+  planBulkCharge,
   summarize,
   donutSegments,
   barScale,
@@ -214,6 +215,43 @@ describe('aggregateByBoat', () => {
 
   it('handles no members', () => {
     expect(aggregateByBoat([])).toEqual([]);
+  });
+});
+
+// ─── planBulkCharge ───
+
+describe('planBulkCharge', () => {
+  it('Svižný case: 14 payers each front 723 for one beneficiary', () => {
+    const payers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14];
+    const plan = planBulkCharge(payers, 723, [26]);
+    expect(plan).toHaveLength(14);
+    // each payer pays 723, all charged to user 26
+    for (const p of plan) {
+      expect(p.amount).toBe(723);
+      expect(p.split_users).toEqual([26]);
+    }
+    expect(plan.map(p => p.paid_by)).toEqual(payers);
+    // total the beneficiary will owe across everyone
+    expect(plan.reduce((s, p) => s + p.amount, 0)).toBe(723 * 14);
+  });
+
+  it('supports multiple beneficiaries (cost shared among them)', () => {
+    const plan = planBulkCharge([1, 2], 100, [3, 4]);
+    expect(plan).toHaveLength(2);
+    expect(plan[0]).toEqual({ paid_by: 1, amount: 100, split_users: [3, 4] });
+  });
+
+  it('dedupes payers and beneficiaries', () => {
+    const plan = planBulkCharge([1, 1, 2], 50, [3, 3]);
+    expect(plan).toHaveLength(2);
+    expect(plan[0].split_users).toEqual([3]);
+  });
+
+  it('returns [] for invalid input', () => {
+    expect(planBulkCharge([], 100, [3])).toEqual([]);
+    expect(planBulkCharge([1], 100, [])).toEqual([]);
+    expect(planBulkCharge([1], 0, [3])).toEqual([]);
+    expect(planBulkCharge([1], -5, [3])).toEqual([]);
   });
 });
 
