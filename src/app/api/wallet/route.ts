@@ -3,7 +3,7 @@ import { query, queryOne, execute, getSetting, setSetting, getAllUsers, pool } f
 import { apiSuccess, apiError } from '@/lib/utils';
 import { convertToBase, CANONICAL_CURRENCY } from '@/lib/currencies';
 import { getExchangeRate, getExchangeRates, getExchangeRateForDate, syncRatesForRange } from '@/lib/exchange';
-import { computeBalances, computeSettlements, aggregateByCategory, aggregateByPayer, aggregateByPayerCategory, summarize } from '@/lib/wallet-calc';
+import { computeBalances, computeSettlements, aggregateByCategory, aggregateByPayer, aggregateByPayerCategory, aggregateByBoat, summarize } from '@/lib/wallet-calc';
 import { notifyBroadcast, notifyUser } from '@/lib/notifications';
 
 // ── Types ──
@@ -999,24 +999,44 @@ async function handleSummary() {
     is_settled: settledSet.has(`${s.from_user_id}-${s.to_user_id}`),
   }));
 
-  // Person × category matrix (who paid what on fuel / food / …)
-  const matrixRaw = aggregateByPayerCategory(expenses);
-  const matrix = {
-    categories: matrixRaw.categories,
-    columnTotals: matrixRaw.columnTotals,
-    grandTotal: matrixRaw.grandTotal,
-    rows: matrixRaw.rows.map(r => ({
+  const enrichMatrix = (m: ReturnType<typeof aggregateByPayerCategory>) => ({
+    categories: m.categories,
+    columnTotals: m.columnTotals,
+    grandTotal: m.grandTotal,
+    rows: m.rows.map(r => ({
       ...r,
       name: userMap.get(r.paid_by)?.name || 'Unknown',
       avatar: userMap.get(r.paid_by)?.avatar ? `/api/avatar/${r.paid_by}` : null,
     })),
-  };
+  });
+
+  // "Paid" matrix — who paid what on fuel / food / …
+  const matrix = enrichMatrix(aggregateByPayerCategory(expenses));
+
+  // "Cost" matrix — what the trip cost each person per category (their shares)
+  const splitRows = await query<{ user_id: number; amount_eur: string; category: string }>(
+    `SELECT s.user_id, s.amount_eur, e.category
+     FROM wallet_expense_splits s JOIN wallet_expenses e ON s.expense_id = e.id`,
+  );
+  const matrixCost = enrichMatrix(aggregateByPayerCategory(
+    splitRows.map(s => ({ amount_eur: parseFloat(s.amount_eur), category: s.category, paid_by: s.user_id })),
+  ));
+
+  // Per-boat totals (cost = sum of that boat's members' shares)
+  const byBoat = aggregateByBoat(users.map(u => ({
+    boat_id: u.boat_id,
+    boat_name: u.boat_name,
+    paid: paidMap[u.id] ?? 0,
+    share: shareMap[u.id] ?? 0,
+  })));
 
   return apiSuccess({
     summary,
     by_category: byCategory,
     by_payer: byPayer,
+    by_boat: byBoat,
     matrix,
+    matrix_cost: matrixCost,
     settlements,
     base_currency: baseCurrency,
     display_rate: await getDisplayRate(baseCurrency),
