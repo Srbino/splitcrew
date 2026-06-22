@@ -183,6 +183,8 @@ const cs: Translations = {
     drillCost: 'Co za {{name}} kdo platil (po položkách)',
     drillPaid: '{{name}} zaplatil tyto položky',
     drillPaidBy: 'zaplatil',
+    willPay: '{{name}} zaplatí',
+    willReceive: '{{name}} dostane zaplaceno od',
     closeWallet: 'Uzavřít peněženku',
     reopenWallet: 'Znovu otevřít',
     walletClosed: 'Peněženka byla uzavřena',
