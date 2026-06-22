@@ -278,6 +278,7 @@ export default function WalletPage() {
     loadRates();
     loadStatus();
     loadPending();
+    loadExpenses(); // also needed for the overview per-person drill-down
   }, []);
 
   // ── Load data when tab changes ──
@@ -831,6 +832,7 @@ export default function WalletPage() {
             ) : (
               <WalletOverview
                 data={summary}
+                expenses={expenses}
                 toDisplay={toDisplay}
                 baseCurrency={baseCurrency}
                 categoryLabel={(c) => t(`wallet.categories.${c}`)}

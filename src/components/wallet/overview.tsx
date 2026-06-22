@@ -5,7 +5,7 @@ import { motion } from 'framer-motion';
 import { ArrowRight, PieChart, Users, Receipt, TrendingUp, Table2, Ship } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
-import { cn, getInitials, avatarColorClass } from '@/lib/utils';
+import { cn, getInitials, avatarColorClass, formatDate } from '@/lib/utils';
 import { formatCurrency } from '@/lib/currencies';
 import { donutSegments, barScale } from '@/lib/wallet-calc';
 
@@ -24,6 +24,18 @@ export interface MatrixData {
   rows: MatrixRow[];
   columnTotals: Record<string, number>;
   grandTotal: number;
+}
+export interface ExpenseItem {
+  id: number;
+  paid_by: number;
+  paid_by_name: string;
+  description: string;
+  category: string;
+  expense_date: string;
+  amount: number;
+  currency: string;
+  amount_eur: number;
+  split_amounts: Record<number, number>;
 }
 export interface BoatTotalUI { boat_id: number; boat_name: string; members: number; paid: number; cost: number }
 export interface SummaryData {
@@ -149,10 +161,11 @@ function PayerBars({
 const SELECT_CLS = 'h-8 rounded-md border border-input bg-transparent px-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring';
 
 function ExpenseMatrix({
-  paidMatrix, costMatrix, toDisplay, baseCurrency, categoryLabel, t,
+  paidMatrix, costMatrix, expenses, toDisplay, baseCurrency, categoryLabel, t,
 }: {
   paidMatrix: MatrixData;
   costMatrix?: MatrixData;
+  expenses?: ExpenseItem[];
   toDisplay: (eur: number) => number;
   baseCurrency: string;
   categoryLabel: (c: string) => string;
@@ -178,6 +191,21 @@ function ExpenseMatrix({
   const rowTotal = (r: MatrixRow) => cols.reduce((s, c) => s + (r.byCat[c] ?? 0), 0);
   const grand = colTotals.reduce((s, v) => s + v, 0);
   const cell = (v: number) => (v > 0 ? formatCurrency(toDisplay(v), baseCurrency) : '—');
+
+  // Item-by-item drill-down for the selected person
+  const selectedName = person === 'all' ? '' : (matrix.rows.find(r => r.paid_by === person)?.name ?? '');
+  const drillItems = useMemo(() => {
+    if (person === 'all' || !expenses) return [];
+    const inCat = (c: string) => category === 'all' || c === category;
+    const items = mode === 'cost'
+      ? expenses
+          .filter(e => (e.split_amounts?.[person] ?? 0) > 0 && inCat(e.category))
+          .map(e => ({ id: e.id, description: e.description, by: e.paid_by_name, category: e.category, date: e.expense_date, amount: e.split_amounts[person] }))
+      : expenses
+          .filter(e => e.paid_by === person && inCat(e.category))
+          .map(e => ({ id: e.id, description: e.description, by: e.paid_by_name, category: e.category, date: e.expense_date, amount: e.amount_eur }));
+    return items.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  }, [person, mode, category, expenses]);
 
   return (
     <Card>
@@ -249,6 +277,29 @@ function ExpenseMatrix({
             </tfoot>
           </table>
         </div>
+
+        {/* Item-by-item drill-down for the selected person */}
+        {person !== 'all' && drillItems.length > 0 && (
+          <div className="mt-4 pt-3 border-t border-border">
+            <h4 className="text-xs font-semibold mb-2">
+              {mode === 'cost' ? t('wallet.drillCost', { name: selectedName }) : t('wallet.drillPaid', { name: selectedName })}
+            </h4>
+            <div className="flex flex-col divide-y divide-border">
+              {drillItems.map(it => (
+                <div key={it.id} className="flex items-center gap-3 py-1.5 text-sm">
+                  <div className="flex-1 min-w-0">
+                    <div className="truncate">{it.description}</div>
+                    <div className="text-[11px] text-muted-foreground">
+                      {formatDate(it.date)} · {categoryLabel(it.category)}
+                      {mode === 'cost' ? ` · ${t('wallet.drillPaidBy')}: ${it.by}` : ''}
+                    </div>
+                  </div>
+                  <span className="tabular-nums shrink-0 font-medium">{formatCurrency(toDisplay(it.amount), baseCurrency)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -257,9 +308,10 @@ function ExpenseMatrix({
 // ── Main overview ──
 
 export function WalletOverview({
-  data, toDisplay, baseCurrency, categoryLabel, t,
+  data, expenses, toDisplay, baseCurrency, categoryLabel, t,
 }: {
   data: SummaryData | null;
+  expenses?: ExpenseItem[];
   toDisplay: (eur: number) => number;
   baseCurrency: string;
   categoryLabel: (c: string) => string;
@@ -345,6 +397,7 @@ export function WalletOverview({
         <ExpenseMatrix
           paidMatrix={data.matrix}
           costMatrix={data.matrix_cost}
+          expenses={expenses}
           toDisplay={toDisplay}
           baseCurrency={baseCurrency}
           categoryLabel={categoryLabel}
