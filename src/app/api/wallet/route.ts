@@ -3,7 +3,7 @@ import { query, queryOne, execute, getSetting, setSetting, getAllUsers, pool } f
 import { apiSuccess, apiError } from '@/lib/utils';
 import { convertToBase, CANONICAL_CURRENCY } from '@/lib/currencies';
 import { getExchangeRate, getExchangeRates, getExchangeRateForDate, syncRatesForRange } from '@/lib/exchange';
-import { computeBalances, computeSettlements, aggregateByCategory, aggregateByPayer, summarize } from '@/lib/wallet-calc';
+import { computeBalances, computeSettlements, aggregateByCategory, aggregateByPayer, aggregateByPayerCategory, summarize } from '@/lib/wallet-calc';
 import { notifyBroadcast, notifyUser } from '@/lib/notifications';
 
 // ── Types ──
@@ -999,10 +999,24 @@ async function handleSummary() {
     is_settled: settledSet.has(`${s.from_user_id}-${s.to_user_id}`),
   }));
 
+  // Person × category matrix (who paid what on fuel / food / …)
+  const matrixRaw = aggregateByPayerCategory(expenses);
+  const matrix = {
+    categories: matrixRaw.categories,
+    columnTotals: matrixRaw.columnTotals,
+    grandTotal: matrixRaw.grandTotal,
+    rows: matrixRaw.rows.map(r => ({
+      ...r,
+      name: userMap.get(r.paid_by)?.name || 'Unknown',
+      avatar: userMap.get(r.paid_by)?.avatar ? `/api/avatar/${r.paid_by}` : null,
+    })),
+  };
+
   return apiSuccess({
     summary,
     by_category: byCategory,
     by_payer: byPayer,
+    matrix,
     settlements,
     base_currency: baseCurrency,
     display_rate: await getDisplayRate(baseCurrency),

@@ -10,6 +10,7 @@ import {
   computeSettlements,
   aggregateByCategory,
   aggregateByPayer,
+  aggregateByPayerCategory,
   summarize,
   donutSegments,
   barScale,
@@ -140,6 +141,44 @@ describe('aggregateByPayer', () => {
     const res = aggregateByPayer(SAMPLE);
     expect(res[0]).toEqual({ paid_by: 1, total: 125, count: 2 });
     expect(res.find(r => r.paid_by === 2)).toEqual({ paid_by: 2, total: 50, count: 1 });
+  });
+});
+
+// ─── aggregateByPayerCategory (the matrix) ───
+
+describe('aggregateByPayerCategory', () => {
+  it('builds a person × category matrix with totals', () => {
+    const m = aggregateByPayerCategory(SAMPLE);
+    // categories ordered by total: fuel 125 > food 75
+    expect(m.categories).toEqual(['fuel', 'food']);
+    // payer 1 paid all fuel (125), payer 2 food 50, payer 3 food 25
+    const row1 = m.rows.find(r => r.paid_by === 1)!;
+    expect(row1.byCat).toEqual({ fuel: 125, food: 0 });
+    expect(row1.total).toBe(125);
+    const row2 = m.rows.find(r => r.paid_by === 2)!;
+    expect(row2.byCat).toEqual({ fuel: 0, food: 50 });
+    expect(m.columnTotals).toEqual({ fuel: 125, food: 75 });
+    expect(m.grandTotal).toBe(200);
+  });
+
+  it('rows are sorted by total descending', () => {
+    const m = aggregateByPayerCategory(SAMPLE);
+    const totals = m.rows.map(r => r.total);
+    expect(totals).toEqual([...totals].sort((a, b) => b - a));
+  });
+
+  it('column totals equal the sum of every row cell, and grand total matches', () => {
+    const m = aggregateByPayerCategory(SAMPLE);
+    for (const c of m.categories) {
+      const colFromRows = m.rows.reduce((s, r) => s + r.byCat[c], 0);
+      expect(Math.round(colFromRows * 100) / 100).toBe(m.columnTotals[c]);
+    }
+    const sumRows = m.rows.reduce((s, r) => s + r.total, 0);
+    expect(Math.round(sumRows * 100) / 100).toBe(m.grandTotal);
+  });
+
+  it('handles no expenses', () => {
+    expect(aggregateByPayerCategory([])).toEqual({ categories: [], rows: [], columnTotals: {}, grandTotal: 0 });
   });
 });
 

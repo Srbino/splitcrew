@@ -1,7 +1,7 @@
 import { getSession } from '@/lib/auth';
 import { query, getSetting } from '@/lib/db';
 import { apiError } from '@/lib/utils';
-import { computeBalances, computeSettlements, aggregateByCategory, aggregateByPayer, summarize, donutSegments, barScale } from '@/lib/wallet-calc';
+import { computeBalances, computeSettlements, aggregateByCategory, aggregateByPayer, aggregateByPayerCategory, summarize, donutSegments, barScale } from '@/lib/wallet-calc';
 
 /**
  * Trip data export — generates CSV files for all trip data.
@@ -284,10 +284,15 @@ export async function GET() {
     const shareMap: Record<number, number> = {};
     for (const b of balances) { paidMap[b.id] = parseFloat(b.paid); shareMap[b.id] = parseFloat(b.share); }
     const calcBalances = computeBalances(balances.map(b => b.id), paidMap, shareMap);
+    const matrixRaw = aggregateByPayerCategory(expForCalc);
     const overview = {
       summary: summarize(expForCalc),
       byCategory: aggregateByCategory(expForCalc),
       byPayer: aggregateByPayer(expForCalc).map(p => ({ ...p, name: nameById.get(p.paid_by) || 'Unknown' })),
+      matrix: {
+        ...matrixRaw,
+        rows: matrixRaw.rows.map(r => ({ ...r, name: nameById.get(r.paid_by) || 'Unknown' })),
+      },
       settlements: computeSettlements(calcBalances).map(s => ({
         from_name: nameById.get(s.from_user_id) || 'Unknown',
         to_name: nameById.get(s.to_user_id) || 'Unknown',
@@ -344,6 +349,12 @@ function generateHtmlReport(data: {
     summary: { total: number; count: number; avgPerExpense: number; topCategory: string | null };
     byCategory: { category: string; total: number; count: number }[];
     byPayer: { paid_by: number; total: number; count: number; name: string }[];
+    matrix: {
+      categories: string[];
+      rows: { paid_by: number; name: string; byCat: Record<string, number>; total: number }[];
+      columnTotals: Record<string, number>;
+      grandTotal: number;
+    };
     settlements: { from_name: string; to_name: string; amount: number }[];
   };
 }): string {
@@ -392,6 +403,13 @@ ${segs.map((seg, i) => `<circle cx="80" cy="80" r="${R}" fill="none" stroke="${c
 </div>
 <h3 style="font-size:14px;margin:24px 0 8px;color:#0A2540">By person</h3>
 ${payerBars}
+${overview.matrix.rows.length === 0 ? '' : `<h3 style="font-size:14px;margin:24px 0 8px;color:#0A2540">Spend per person by category</h3>
+<div style="overflow-x:auto"><table style="${tableStyle}">
+<tr><th style="${thStyle}">Name</th>${overview.matrix.categories.map(c => `<th style="${thStyle};text-align:right">${c}</th>`).join('')}<th style="${thStyle};text-align:right">Total</th></tr>
+${overview.matrix.rows.map(r => `<tr><td style="${tdStyle}">${r.name}</td>${overview.matrix.categories.map(c => `<td style="${tdRight}">${r.byCat[c] > 0 ? fmtMoney(r.byCat[c]) : '—'}</td>`).join('')}<td style="${tdRight}"><strong>${fmtMoney(r.total)}</strong></td></tr>`).join('\n')}
+<tr style="border-top:2px solid #ddd"><td style="${tdStyle};font-weight:600">Total</td>${overview.matrix.categories.map(c => `<td style="${tdRight};font-weight:600">${fmtMoney(overview.matrix.columnTotals[c])}</td>`).join('')}<td style="${tdRight};font-weight:700">${fmtMoney(overview.matrix.grandTotal)}</td></tr>
+</table></div>`}
+
 <h3 style="font-size:14px;margin:24px 0 8px;color:#0A2540">Who owes whom</h3>
 ${overview.settlements.length === 0 ? '<p style="color:#666;font-size:13px">All settled up.</p>' : `<p style="color:#666;font-size:12px;margin:0 0 8px">${overview.settlements.length} payment(s) settle everyone — the minimum needed.</p><table style="${tableStyle}">
 <tr><th style="${thStyle}">From</th><th style="${thStyle}">To</th><th style="${thStyle};text-align:right">Amount</th></tr>
