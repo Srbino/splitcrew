@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowRight, PieChart, Users, Receipt, TrendingUp, Table2 } from 'lucide-react';
+import { ArrowRight, PieChart, Users, Receipt, TrendingUp, Table2, Ship } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { cn, getInitials, avatarColorClass } from '@/lib/utils';
@@ -25,11 +25,14 @@ export interface MatrixData {
   columnTotals: Record<string, number>;
   grandTotal: number;
 }
+export interface BoatTotalUI { boat_id: number; boat_name: string; members: number; paid: number; cost: number }
 export interface SummaryData {
   summary: { total: number; count: number; avgPerExpense: number; topCategory: string | null };
   by_category: CategorySlice[];
   by_payer: PayerSlice[];
+  by_boat?: BoatTotalUI[];
   matrix?: MatrixData;
+  matrix_cost?: MatrixData;
   settlements: OweRow[];
 }
 
@@ -146,16 +149,20 @@ function PayerBars({
 const SELECT_CLS = 'h-8 rounded-md border border-input bg-transparent px-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring';
 
 function ExpenseMatrix({
-  matrix, toDisplay, baseCurrency, categoryLabel, t,
+  paidMatrix, costMatrix, toDisplay, baseCurrency, categoryLabel, t,
 }: {
-  matrix: MatrixData;
+  paidMatrix: MatrixData;
+  costMatrix?: MatrixData;
   toDisplay: (eur: number) => number;
   baseCurrency: string;
   categoryLabel: (c: string) => string;
   t: (key: string, params?: Record<string, string | number>) => string;
 }) {
+  const [mode, setMode] = useState<'paid' | 'cost'>('paid');
   const [person, setPerson] = useState<number | 'all'>('all');
   const [category, setCategory] = useState<string>('all');
+
+  const matrix = mode === 'cost' && costMatrix ? costMatrix : paidMatrix;
 
   const cols = useMemo(
     () => (category === 'all' ? matrix.categories : matrix.categories.filter(c => c === category)),
@@ -175,20 +182,33 @@ function ExpenseMatrix({
   return (
     <Card>
       <CardContent className="p-4">
-        <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
+        <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
           <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
-            <Table2 size={13} /> {t('wallet.matrixTitle')}
+            <Table2 size={13} /> {mode === 'cost' ? t('wallet.matrixTitleCost') : t('wallet.matrixTitle')}
           </h3>
-          <div className="flex gap-2">
-            <select className={SELECT_CLS} value={person} onChange={e => setPerson(e.target.value === 'all' ? 'all' : Number(e.target.value))}>
-              <option value="all">{t('wallet.matrixAllPeople')}</option>
-              {matrix.rows.map(r => <option key={r.paid_by} value={r.paid_by}>{r.name}</option>)}
-            </select>
-            <select className={SELECT_CLS} value={category} onChange={e => setCategory(e.target.value)}>
-              <option value="all">{t('wallet.matrixAllCategories')}</option>
-              {matrix.categories.map(c => <option key={c} value={c}>{categoryLabel(c)}</option>)}
-            </select>
-          </div>
+          {costMatrix && (
+            <div className="flex rounded-md border border-border p-0.5 bg-muted/50 text-xs">
+              <button
+                className={cn('px-2.5 py-1 rounded cursor-pointer border-none', mode === 'paid' ? 'bg-background shadow-sm font-medium' : 'bg-transparent text-muted-foreground')}
+                onClick={() => setMode('paid')}
+              >{t('wallet.matrixModePaid')}</button>
+              <button
+                className={cn('px-2.5 py-1 rounded cursor-pointer border-none', mode === 'cost' ? 'bg-background shadow-sm font-medium' : 'bg-transparent text-muted-foreground')}
+                onClick={() => setMode('cost')}
+              >{t('wallet.matrixModeCost')}</button>
+            </div>
+          )}
+        </div>
+        <p className="text-xs text-muted-foreground mb-3">{mode === 'cost' ? t('wallet.matrixHintCost') : t('wallet.matrixHintPaid')}</p>
+        <div className="flex gap-2 mb-3">
+          <select className={SELECT_CLS} value={person} onChange={e => setPerson(e.target.value === 'all' ? 'all' : Number(e.target.value))}>
+            <option value="all">{t('wallet.matrixAllPeople')}</option>
+            {matrix.rows.map(r => <option key={r.paid_by} value={r.paid_by}>{r.name}</option>)}
+          </select>
+          <select className={SELECT_CLS} value={category} onChange={e => setCategory(e.target.value)}>
+            <option value="all">{t('wallet.matrixAllCategories')}</option>
+            {matrix.categories.map(c => <option key={c} value={c}>{categoryLabel(c)}</option>)}
+          </select>
         </div>
 
         <div className="overflow-x-auto -mx-1 px-1">
@@ -295,10 +315,36 @@ export function WalletOverview({
         </CardContent>
       </Card>
 
-      {/* Per-person × category matrix with filters */}
+      {/* Cost per boat */}
+      {data.by_boat && data.by_boat.length > 0 && (
+        <Card>
+          <CardContent className="p-4">
+            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3 flex items-center gap-1.5">
+              <Ship size={13} /> {t('wallet.byBoat')}
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {data.by_boat.map(b => (
+                <div key={b.boat_id} className="rounded-lg border border-border p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-semibold text-sm">{b.boat_name}</span>
+                    <span className="text-xs text-muted-foreground">{t('wallet.boatMembers', { count: b.members })}</span>
+                  </div>
+                  <div className="text-xl font-bold tabular-nums mt-1">{formatCurrency(toDisplay(b.cost), baseCurrency)}</div>
+                  <div className="text-[11px] text-muted-foreground mt-0.5">
+                    {t('wallet.boatPerPerson')}: {formatCurrency(toDisplay(b.members > 0 ? b.cost / b.members : 0), baseCurrency)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Per-person × category matrix with filters + Paid/Cost toggle */}
       {data.matrix && data.matrix.rows.length > 0 && (
         <ExpenseMatrix
-          matrix={data.matrix}
+          paidMatrix={data.matrix}
+          costMatrix={data.matrix_cost}
           toDisplay={toDisplay}
           baseCurrency={baseCurrency}
           categoryLabel={categoryLabel}

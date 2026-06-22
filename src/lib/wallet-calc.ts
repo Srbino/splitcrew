@@ -220,6 +220,37 @@ export function aggregateByPayerCategory(expenses: ExpenseLike[]): PayerCategory
   };
 }
 
+export interface BoatTotal {
+  boat_id: number;
+  boat_name: string;
+  members: number;
+  /** total the boat's crew actually paid out */
+  paid: number;
+  /** what the trip cost this boat's crew (sum of their shares) */
+  cost: number;
+}
+
+/**
+ * Roll up per-member paid/share into per-boat totals. `cost` (sum of shares) is
+ * what the trip actually cost that boat's crew; `paid` is what they fronted.
+ * Sorted by cost descending.
+ */
+export function aggregateByBoat(
+  members: { boat_id: number; boat_name: string; paid: number; share: number }[],
+): BoatTotal[] {
+  const map = new Map<number, { boat_name: string; members: number; paid: number; cost: number }>();
+  for (const m of members) {
+    const cur = map.get(m.boat_id) ?? { boat_name: m.boat_name, members: 0, paid: 0, cost: 0 };
+    cur.members += 1;
+    cur.paid += m.paid;
+    cur.cost += m.share;
+    map.set(m.boat_id, cur);
+  }
+  return [...map.entries()]
+    .map(([boat_id, v]) => ({ boat_id, boat_name: v.boat_name, members: v.members, paid: round2(v.paid), cost: round2(v.cost) }))
+    .sort((a, b) => b.cost - a.cost);
+}
+
 export interface Summary {
   total: number;
   count: number;

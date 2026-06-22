@@ -11,6 +11,7 @@ import {
   aggregateByCategory,
   aggregateByPayer,
   aggregateByPayerCategory,
+  aggregateByBoat,
   summarize,
   donutSegments,
   barScale,
@@ -179,6 +180,40 @@ describe('aggregateByPayerCategory', () => {
 
   it('handles no expenses', () => {
     expect(aggregateByPayerCategory([])).toEqual({ categories: [], rows: [], columnTotals: {}, grandTotal: 0 });
+  });
+});
+
+// ─── aggregateByBoat ───
+
+describe('aggregateByBoat', () => {
+  const members = [
+    { boat_id: 1, boat_name: 'Nefele', paid: 100, share: 80 },
+    { boat_id: 1, boat_name: 'Nefele', paid: 50, share: 70 },
+    { boat_id: 2, boat_name: 'Calliope', paid: 200, share: 150 },
+  ];
+
+  it('sums paid + cost (share) and counts members per boat', () => {
+    const res = aggregateByBoat(members);
+    const nefele = res.find(b => b.boat_id === 1)!;
+    const calliope = res.find(b => b.boat_id === 2)!;
+    expect(nefele).toEqual({ boat_id: 1, boat_name: 'Nefele', members: 2, paid: 150, cost: 150 });
+    expect(calliope).toEqual({ boat_id: 2, boat_name: 'Calliope', members: 1, paid: 200, cost: 150 });
+  });
+
+  it('does NOT mix members between boats (each row counted once, in its own boat)', () => {
+    const res = aggregateByBoat(members);
+    expect(res.reduce((s, b) => s + b.members, 0)).toBe(members.length);
+  });
+
+  it('boat costs sum to the grand total of shares (money conserved)', () => {
+    const res = aggregateByBoat(members);
+    const totalCost = Math.round(res.reduce((s, b) => s + b.cost, 0) * 100) / 100;
+    const totalShare = Math.round(members.reduce((s, m) => s + m.share, 0) * 100) / 100;
+    expect(totalCost).toBe(totalShare);
+  });
+
+  it('handles no members', () => {
+    expect(aggregateByBoat([])).toEqual([]);
   });
 });
 

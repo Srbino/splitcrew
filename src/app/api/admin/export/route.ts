@@ -1,7 +1,7 @@
 import { getSession } from '@/lib/auth';
 import { query, getSetting } from '@/lib/db';
 import { apiError } from '@/lib/utils';
-import { computeBalances, computeSettlements, aggregateByCategory, aggregateByPayer, aggregateByPayerCategory, summarize, donutSegments, barScale } from '@/lib/wallet-calc';
+import { computeBalances, computeSettlements, aggregateByCategory, aggregateByPayer, aggregateByPayerCategory, aggregateByBoat, summarize, donutSegments, barScale } from '@/lib/wallet-calc';
 
 /**
  * Trip data export — generates CSV files for all trip data.
@@ -109,9 +109,9 @@ export async function GET() {
 
     // ── Balances Summary ──
     const balances = await query<{
-      id: number; name: string; boat_name: string; paid: string; share: string;
+      id: number; name: string; boat_id: number; boat_name: string; paid: string; share: string;
     }>(
-      `SELECT u.id, u.name, b.name as boat_name,
+      `SELECT u.id, u.name, u.boat_id, b.name as boat_name,
               COALESCE((SELECT SUM(amount_eur) FROM wallet_expenses WHERE paid_by = u.id), 0) as paid,
               COALESCE((SELECT SUM(amount_eur) FROM wallet_expense_splits WHERE user_id = u.id), 0) as share
        FROM users u LEFT JOIN boats b ON u.boat_id = b.id
@@ -293,6 +293,10 @@ export async function GET() {
         ...matrixRaw,
         rows: matrixRaw.rows.map(r => ({ ...r, name: nameById.get(r.paid_by) || 'Unknown' })),
       },
+      byBoat: aggregateByBoat(balances.map(b => ({
+        boat_id: b.boat_id, boat_name: b.boat_name,
+        paid: parseFloat(b.paid), share: parseFloat(b.share),
+      }))),
       settlements: computeSettlements(calcBalances).map(s => ({
         from_name: nameById.get(s.from_user_id) || 'Unknown',
         to_name: nameById.get(s.to_user_id) || 'Unknown',
@@ -349,6 +353,7 @@ function generateHtmlReport(data: {
     summary: { total: number; count: number; avgPerExpense: number; topCategory: string | null };
     byCategory: { category: string; total: number; count: number }[];
     byPayer: { paid_by: number; total: number; count: number; name: string }[];
+    byBoat: { boat_id: number; boat_name: string; members: number; paid: number; cost: number }[];
     matrix: {
       categories: string[];
       rows: { paid_by: number; name: string; byCat: Record<string, number>; total: number }[];
@@ -401,7 +406,11 @@ ${segs.map((seg, i) => `<circle cx="80" cy="80" r="${R}" fill="none" stroke="${c
   <div>${donutSvg}</div>
   <div style="flex:1;min-width:240px">${donutLegend}</div>
 </div>
-<h3 style="font-size:14px;margin:24px 0 8px;color:#0A2540">By person</h3>
+<h3 style="font-size:14px;margin:24px 0 8px;color:#0A2540">Cost per boat</h3>
+<div class="stats">
+${overview.byBoat.map(b => `  <div class="stat"><div class="stat-value">${fmtMoney(b.cost)} ${storageCurrency}</div><div class="stat-label">${b.boat_name} · ${b.members} ppl · ${fmtMoney(b.members > 0 ? b.cost / b.members : 0)}/ppl</div></div>`).join('\n')}
+</div>
+<h3 style="font-size:14px;margin:24px 0 8px;color:#0A2540">By person (paid)</h3>
 ${payerBars}
 ${overview.matrix.rows.length === 0 ? '' : `<h3 style="font-size:14px;margin:24px 0 8px;color:#0A2540">Spend per person by category</h3>
 <div style="overflow-x:auto"><table style="${tableStyle}">
