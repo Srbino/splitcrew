@@ -107,6 +107,20 @@ export async function GET() {
       splits.map(s => [String(s.expense_id), s.description, s.user_name, s.amount_eur]),
     );
 
+    // ── Per-person itemised breakdown (what everyone paid for each person) ──
+    const splitDetail = await query<{
+      user_id: number; user_name: string; expense_date: string; description: string;
+      category: string; paid_by_name: string; share: string;
+    }>(
+      `SELECT s.user_id, su.name AS user_name, e.expense_date, e.description,
+              e.category, pu.name AS paid_by_name, s.amount_eur AS share
+       FROM wallet_expense_splits s
+       JOIN users su ON s.user_id = su.id
+       JOIN wallet_expenses e ON s.expense_id = e.id
+       JOIN users pu ON e.paid_by = pu.id
+       ORDER BY su.name, e.expense_date, e.id`
+    );
+
     // ── Balances Summary ──
     const balances = await query<{
       id: number; name: string; boat_id: number; boat_name: string; paid: string; share: string;
@@ -304,11 +318,24 @@ export async function GET() {
       })),
     };
 
+    // Group the split detail per person (item-by-item, who paid)
+    const perPersonMap = new Map<string, { name: string; total: number; items: { date: string; description: string; paid_by_name: string; category: string; share: number }[] }>();
+    for (const d of splitDetail) {
+      const entry = perPersonMap.get(d.user_name) ?? { name: d.user_name, total: 0, items: [] };
+      const share = parseFloat(d.share);
+      entry.total += share;
+      entry.items.push({ date: d.expense_date, description: d.description, paid_by_name: d.paid_by_name, category: d.category, share });
+      perPersonMap.set(d.user_name, entry);
+    }
+    const perPerson = [...perPersonMap.values()]
+      .map(p => ({ ...p, total: Math.round(p.total * 100) / 100 }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+
     // ── HTML Report ──
     const htmlReport = generateHtmlReport({
       tripName, tripFrom, tripTo, storageCurrency,
       users, expenses, balances, settled, shopping, logbook, meals,
-      totalExpenses, totalNm, overview,
+      totalExpenses, totalNm, overview, perPerson,
     });
 
     return Response.json({
@@ -362,8 +389,9 @@ function generateHtmlReport(data: {
     };
     settlements: { from_name: string; to_name: string; amount: number }[];
   };
+  perPerson: { name: string; total: number; items: { date: string; description: string; paid_by_name: string; category: string; share: number }[] }[];
 }): string {
-  const { tripName, tripFrom, tripTo, storageCurrency, users, expenses, balances, settled, shopping, logbook, meals, totalExpenses, totalNm, overview } = data;
+  const { tripName, tripFrom, tripTo, storageCurrency, users, expenses, balances, settled, shopping, logbook, meals, totalExpenses, totalNm, overview, perPerson } = data;
 
   const fmtDate = (d: string) => { try { return new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }); } catch { return d; } };
   const fmtMoney = (n: string | number) => Number(n).toFixed(2);
@@ -392,6 +420,18 @@ ${segs.map((seg, i) => `<circle cx="80" cy="80" r="${R}" fill="none" stroke="${c
 
   const payerWidths = barScale(overview.byPayer.map(p => p.total));
   const payerBars = overview.byPayer.map((p, i) => `<div style="margin:8px 0"><div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px"><span>${p.name}</span><span style="font-variant-numeric:tabular-nums">${fmtMoney(p.total)} ${storageCurrency}</span></div><div style="height:8px;border-radius:4px;background:#eee;overflow:hidden"><div style="height:100%;width:${payerWidths[i]}%;background:#0A2540;border-radius:4px"></div></div></div>`).join('\n');
+
+  // Per-person itemised breakdown — "what everyone paid for me, item by item"
+  const perPersonHtml = perPerson.length === 0 ? '' : `
+<h2>🧑‍🤝‍🧑 Per-person breakdown</h2>
+<p class="subtitle">For each person: every item they share in, who paid it, and their share.</p>
+${perPerson.map(p => `
+<h3 style="font-size:15px;margin:20px 0 6px;color:#0A2540">${p.name} — <span style="color:#0d9668">${fmtMoney(p.total)} ${storageCurrency}</span></h3>
+<table style="${tableStyle}">
+<tr><th style="${thStyle}">Date</th><th style="${thStyle}">Item</th><th style="${thStyle}">Paid by</th><th style="${thStyle}">Category</th><th style="${thStyle};text-align:right">Your share</th></tr>
+${p.items.map(it => `<tr><td style="${tdStyle}">${fmtDate(it.date)}</td><td style="${tdStyle}">${it.description}</td><td style="${tdStyle}">${it.paid_by_name}</td><td style="${tdStyle}"><span class="badge">${it.category}</span></td><td style="${tdRight}">${fmtMoney(it.share)} ${storageCurrency}</td></tr>`).join('\n')}
+</table>`).join('\n')}
+`;
 
   const overviewHtml = `
 <h2>📊 Overview</h2>
@@ -480,6 +520,7 @@ ${balances.map(b => {
 <tr><th style="${thStyle}">Date</th><th style="${thStyle}">Description</th><th style="${thStyle}">Paid By</th><th style="${thStyle}">Category</th><th style="${thStyle};text-align:right">Amount</th><th style="${thStyle};text-align:right">${storageCurrency}</th></tr>
 ${expenses.map(e => `<tr><td style="${tdStyle}">${fmtDate(e.expense_date)}</td><td style="${tdStyle}">${e.description}</td><td style="${tdStyle}">${e.paid_by_name}</td><td style="${tdStyle}"><span class="badge">${e.category}</span></td><td style="${tdRight}">${fmtMoney(e.amount)} ${e.currency}</td><td style="${tdRight}">${fmtMoney(e.amount_eur)}</td></tr>`).join('\n')}
 </table>
+${perPersonHtml}
 
 ${settled.length > 0 ? `
 <h2>🤝 Settlements</h2>
