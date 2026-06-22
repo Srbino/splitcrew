@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus, Pencil, Trash2, Check, X, ArrowRight,
   Receipt, BarChart3, Handshake, RefreshCw, ChevronDown,
-  PieChart, Lock, Unlock, Clock, AlertCircle,
+  PieChart, Lock, Unlock, Clock, AlertCircle, Users,
 } from 'lucide-react';
 import { WalletOverview, type SummaryData } from '@/components/wallet/overview';
 import { Modal } from '@/components/shared/modal';
@@ -222,6 +222,17 @@ export default function WalletPage() {
   const [submitAsRequest, setSubmitAsRequest] = useState(false);
   const [rejectingId, setRejectingId] = useState<number | null>(null);
   const [rejectNote, setRejectNote] = useState('');
+
+  // Bulk charge (admin) state
+  const [showBulkModal, setShowBulkModal] = useState(false);
+  const [bulkDescription, setBulkDescription] = useState('');
+  const [bulkCategory, setBulkCategory] = useState('other');
+  const [bulkDate, setBulkDate] = useState('');
+  const [bulkCurrency, setBulkCurrency] = useState('EUR');
+  const [bulkAmount, setBulkAmount] = useState('');
+  const [bulkPayers, setBulkPayers] = useState<number[]>([]);
+  const [bulkBeneficiaries, setBulkBeneficiaries] = useState<number[]>([]);
+  const [bulkSubmitting, setBulkSubmitting] = useState(false);
 
   // Boats (loaded dynamically)
   const [boats, setBoats] = useState<BoatInfo[]>([]);
@@ -520,6 +531,55 @@ export default function WalletPage() {
     }
   };
 
+  const openBulkModal = useCallback(() => {
+    setBulkDescription('');
+    setBulkCategory('other');
+    setBulkDate(new Date().toISOString().slice(0, 16));
+    setBulkCurrency(baseCurrency);
+    setBulkAmount('');
+    setBulkPayers([]);
+    setBulkBeneficiaries([]);
+    setShowBulkModal(true);
+  }, [baseCurrency]);
+
+  const handleBulkSubmit = async () => {
+    if (!bulkDescription.trim()) { showToast(t('wallet.description') + ' …', 'error'); return; }
+    if (!bulkAmount || parseFloat(bulkAmount) <= 0) { showToast(t('wallet.amount') + ' …', 'error'); return; }
+    if (bulkPayers.length === 0) { showToast(t('wallet.bulkPayers'), 'error'); return; }
+    if (bulkBeneficiaries.length === 0) { showToast(t('wallet.bulkBeneficiaries'), 'error'); return; }
+
+    setBulkSubmitting(true);
+    const res = await apiCall<{ created: number }>('/api/wallet', {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'bulk_add',
+        description: bulkDescription.trim(),
+        category: bulkCategory,
+        expense_date: bulkDate || new Date().toISOString().slice(0, 16),
+        currency: bulkCurrency,
+        amount: parseFloat(bulkAmount),
+        payers: bulkPayers,
+        split_users: bulkBeneficiaries,
+      }),
+    });
+    setBulkSubmitting(false);
+
+    if (res.success) {
+      showToast(t('wallet.bulkDone', { count: res.data?.created ?? bulkPayers.length }), 'success');
+      setShowBulkModal(false);
+      loadExpenses();
+      loadStatus();
+      if (activeTab === 'overview') loadSummary();
+    } else {
+      showToast(res.error || 'Error', 'error');
+    }
+  };
+
+  const toggleBulkPayer = (id: number) =>
+    setBulkPayers(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  const toggleBulkBeneficiary = (id: number) =>
+    setBulkBeneficiaries(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+
   const handleApprovePending = async (id: number) => {
     const res = await apiCall('/api/wallet', {
       method: 'POST',
@@ -681,13 +741,18 @@ export default function WalletPage() {
           )}
         </div>
         {isAdmin && (
-          <Button
-            variant={walletStatus.status === 'closed' ? 'outline' : 'default'}
-            size="sm"
-            onClick={handleToggleClose}
-          >
-            {walletStatus.status === 'closed' ? <><Unlock size={15} /> {t('wallet.reopenWallet')}</> : <><Lock size={15} /> {t('wallet.closeWallet')}</>}
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={openBulkModal}>
+              <Users size={15} /> {t('wallet.bulkCharge')}
+            </Button>
+            <Button
+              variant={walletStatus.status === 'closed' ? 'outline' : 'default'}
+              size="sm"
+              onClick={handleToggleClose}
+            >
+              {walletStatus.status === 'closed' ? <><Unlock size={15} /> {t('wallet.reopenWallet')}</> : <><Lock size={15} /> {t('wallet.closeWallet')}</>}
+            </Button>
+          </div>
         )}
       </div>
 
@@ -1032,6 +1097,117 @@ export default function WalletPage() {
             placeholder={t('wallet.rejectReasonPlaceholder')}
             maxLength={200}
           />
+        </div>
+      </Modal>
+
+      {/* Bulk charge modal (admin) */}
+      <Modal
+        isOpen={showBulkModal}
+        onClose={() => setShowBulkModal(false)}
+        title={t('wallet.bulkCharge')}
+        size="lg"
+        footer={
+          <div className="flex gap-2 justify-end w-full">
+            <Button variant="outline" onClick={() => setShowBulkModal(false)}>{t('common.cancel')}</Button>
+            <Button onClick={handleBulkSubmit} disabled={bulkSubmitting}>
+              {bulkSubmitting ? t('common.loading') : t('wallet.bulkCreate')}
+            </Button>
+          </div>
+        }
+      >
+        <div className="flex flex-col gap-4">
+          <div className="flex items-start gap-2 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+            <AlertCircle size={14} className="mt-0.5 shrink-0" />
+            <span>{t('wallet.bulkHint')}</span>
+          </div>
+
+          <div className="space-y-2">
+            <Label>{t('wallet.description')}</Label>
+            <Input type="text" value={bulkDescription} onChange={e => setBulkDescription(e.target.value)} placeholder={t('wallet.description')} maxLength={200} />
+          </div>
+
+          <div className="grid grid-cols-[1fr_120px] gap-3">
+            <div className="space-y-2">
+              <Label>{t('wallet.bulkAmountPerPayer')}</Label>
+              <Input type="number" value={bulkAmount} onChange={e => setBulkAmount(e.target.value)} placeholder="0.00" step="0.01" min="0" inputMode="decimal" />
+            </div>
+            <div className="space-y-2">
+              <Label>{t('wallet.currency')}</Label>
+              <select className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" value={bulkCurrency} onChange={e => setBulkCurrency(e.target.value)}>
+                {(getAllowedCurrencies().length > 0 ? getAllowedCurrencies() : CURRENCY_CODES).map(code => {
+                  const info = getCurrency(code);
+                  return <option key={code} value={code}>{info.flag} {code}</option>;
+                })}
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label>{t('wallet.category')}</Label>
+              <select className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" value={bulkCategory} onChange={e => setBulkCategory(e.target.value)}>
+                {categories.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label>{t('wallet.date')}</Label>
+              <Input type="datetime-local" value={bulkDate} onChange={e => setBulkDate(e.target.value)} />
+            </div>
+          </div>
+
+          {/* Payers */}
+          <div className="space-y-2">
+            <div className="flex justify-between items-center">
+              <Label className="mb-0">{t('wallet.bulkPayers')} ({bulkPayers.length})</Label>
+              <div className="flex gap-1.5">
+                <Button type="button" variant="outline" size="xs" onClick={() => setBulkPayers(users.map(u => u.id))}>{t('common.all')}</Button>
+                <Button type="button" variant="outline" size="xs" onClick={() => setBulkPayers([])}>None</Button>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {users.map(u => {
+                const sel = bulkPayers.includes(u.id);
+                return (
+                  <button key={u.id} type="button" onClick={() => toggleBulkPayer(u.id)}
+                    className={cn('flex items-center gap-1.5 px-3 py-1.5 rounded-full border-2 cursor-pointer text-sm transition-all', sel ? 'border-primary bg-primary/10 font-semibold' : 'border-border')}>
+                    <UserAvatar name={u.name} avatar={u.avatar} userId={u.id} />
+                    {u.name}
+                    {sel && <Check size={14} className="text-primary" />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Beneficiaries */}
+          <div className="space-y-2">
+            <Label className="mb-0">{t('wallet.bulkBeneficiaries')} ({bulkBeneficiaries.length})</Label>
+            <div className="flex flex-wrap gap-1.5">
+              {users.map(u => {
+                const sel = bulkBeneficiaries.includes(u.id);
+                return (
+                  <button key={u.id} type="button" onClick={() => toggleBulkBeneficiary(u.id)}
+                    className={cn('flex items-center gap-1.5 px-3 py-1.5 rounded-full border-2 cursor-pointer text-sm transition-all', sel ? 'border-primary bg-primary/10 font-semibold' : 'border-border')}>
+                    <UserAvatar name={u.name} avatar={u.avatar} userId={u.id} />
+                    {u.name}
+                    {sel && <Check size={14} className="text-primary" />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Preview */}
+          {bulkPayers.length > 0 && bulkBeneficiaries.length > 0 && parseFloat(bulkAmount) > 0 && (
+            <div className="rounded-lg border border-border px-3 py-2 text-sm">
+              {t('wallet.bulkPreview', {
+                count: bulkPayers.length,
+                amount: formatCurrency(parseFloat(bulkAmount), bulkCurrency),
+                total: formatCurrency(parseFloat(bulkAmount) * bulkPayers.length, bulkCurrency),
+                who: bulkBeneficiaries.map(id => users.find(u => u.id === id)?.name || '?').join(', '),
+              })}
+            </div>
+          )}
         </div>
       </Modal>
     </div>
