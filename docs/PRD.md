@@ -113,6 +113,14 @@ základ) · grafy (máme) · bez reklam · branding/white-label (B2B) · offline
   později Stripe Connect % z plateb.
 - **P4 — Šířka:** další šablony, offline, marketplace šablon.
 
-## 12. Otevřená rozhodnutí (k doplnění s tebou)
-Viz dotazy v konverzaci — segment priority (B2B vs consumer first), v1 šablony, branding/
-název, rozsah plateb (QR vs Stripe Connect), cenové hladiny, co přesně do free vs Pro.
+## 12. Rozhodnutí — kolo 1 (locked 2026-06-23)
+- **Monetizace: consumer i B2B PARALELNĚ** (stejný základ obslouží oboje).
+- **v1 šablony (všechny 4):** „Jen rozpočítat / výlet", **Plachtění** (stávající, máme
+  reálné uživatele), **Roadtrip/obytňák**, **Zájezdovka (B2B)**.
+- **Branding: zobecnit — nový název** (CrewSplit zní moc námořně). Kandidáty vybrat.
+- **Platby v1: QR Platba (CZ) hned** (non-custodial, zdarma). SEPA QR / Stripe Connect %
+  později.
+
+## 13. Otevřená rozhodnutí — kolo 2 (k doplnění)
+Nový název (kandidáti), co přesně free vs Pro, jak se členové přidávají/identifikují,
+které průřezové featury do v1, branding/white-label pro B2B v1?
