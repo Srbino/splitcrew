@@ -28,8 +28,12 @@ zdarma, peníze z B2B operátorů + prémiové nadstavby + plateb.
 
 ## 4. Jádro produktu: Workspace × Moduly × Šablony
 - **Workspace** = pojmenovaná jednotka (výlet/akce/skupina/projekt). Má admina + členy.
-- **Moduly** (zapínatelné per workspace): **Výdaje + Vyrovnání (jádro, vždy)**, Nákupy/
+- **Moduly** (zapínatelné per workspace, postavené jako **pluginy**): **Výdaje + Vyrovnání
+  (jádro, vždy)**, **Společná kasa (kitty, ledger)**, **Kalendář + Upomínky**, Nákupy/
   Inventář, Jídelníček, Itinerář, Checklist, Deník, Skupiny/Auta, Dokumenty, Notifikace.
+- **Plugin architektura:** moduly mají čisté rozhraní → později lze zapnout **mini-marketplace**
+  (komunita/partneři přidávají šablony/moduly). Marketplace samotný = až P4+, teď jen čistá
+  pluginová vrstva.
 - **Šablony** = předvolené sady modulů + obsah. Admin klikne šablonu → hotovo, nebo si
   moduly nakliká sám. Nová use-case = konfigurace, ne nový kód.
 
@@ -45,7 +49,8 @@ zdarma, peníze z B2B operátorů + prémiové nadstavby + plateb.
 |---|---|---|---|
 | 1 | „Jen rozpočítat" / výlet (vč. plachtění, roadtrip, festival jako varianty) | akviziční free core | nepřímá (růst) |
 | 2 | **Zájezdovka / zážitkový operátor (B2B)** | **hlavní příjem** | SaaS + později % z plateb |
-| 3 | Spolubydlení (opakované účty) | retence | rail + Pro |
+| 3 | **Domácnost / Spolubydlení** (nájem, energie, úklid, opakované, kalendář+upomínky) | retence (každoměsíční) | rail + Pro |
+| 4 | **Auto** (palivo, servis, pojistka, splátky — sdílené/mezi přáteli) | retence | rail + Pro |
 
 > Festival/svatby/dárky/sporťáci/kemp/lyžovačky: drž jako levné šablony (konfigurace),
 > **nestav na nich byznys** — research nenašel ověřená data o poptávce/penězích.
@@ -151,6 +156,15 @@ notifikace a návrat na jiném zařízení). Admin/operátor = plný účet (web
 | **TripKit** | silné pro výlety (ale víc tripové) |
 | **Crewly** | drží dědictví „crew", ale zobecňuje |
 > Před finálem ověřit volnou doménu (.com/.cz) + ochrannou známku.
+
+## 13b. Rozšíření (kolo 3, 2026-06-23)
+- **Společná kasa (kitty) jako modul** — „peněženka pro partu". **Ledger-first** (sledujeme
+  příspěvky vs útraty ze společné kasy, zůstatek dopočítán, vyrovnání přes QR). **Bez držení
+  cizích peněz** (custodial = licence/KYC → až později přes Stripe/Mangopay).
+- **Kalendář + Upomínky jako modul** — termíny (nájem, energie, opakované platby), notifikace
+  + e-mail. Klíč pro retenci u domácnosti/spolubydlení.
+- **Nové šablony: Domácnost/Spolubydlení a Auto** (opakované náklady).
+- **Pluginová architektura** modulů od začátku → pozdější **mini-marketplace** (P4+).
 
 ## 14. v1 scope (shrnutí)
 - **Základ (P0):** multi-tenant workspacy, web registrace (admin) + magic-link členové,
