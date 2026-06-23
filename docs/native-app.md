@@ -40,12 +40,25 @@ Důsledky:
   otevření v Xcode.
 - Ikony + splash vygenerované do obou projektů (android 100, ios 13).
 
+## Stav prostředí (Mac, 2026-06-23) ✅
+- **Xcode 26.5 nainstalován na externím SSD** (`/Volumes/SSD 990 PRO/Applications/Xcode-26.5.0.app`)
+  přes `xcodes` — interní disk šetřen.
+- **iOS 26.5 SDK + Simulator runtime nainstalovány**, **iOS build pro simulátor ověřeně
+  prochází** (`** BUILD SUCCEEDED **`).
+- **DerivedData přesměrovány na externí** (`defaults write com.apple.dt.Xcode
+  IDECustomDerivedDataLocation "/Volumes/SSD 990 PRO/Xcode/DerivedData"`) — build artefakty
+  nerostou na interním.
+- Pozn.: **CoreSimulator (runtimy) nelze přesunout na externí** — soubory uvnitř jsou
+  chráněné SIP. Místo toho se uvolnil interní smazáním staré iOS 18.6 (přes `simctl runtime
+  delete`). Runtime iOS 26.5 (~8,5 GB) je na interním. Když potřebuješ interní místo a stačí
+  ti shipovat na zařízení (ne simulátor), lze ho odebrat: `xcrun simctl runtime delete "iOS 26.5"`.
+
 ## Co NEMÁME / je potřeba dodělat ⚠️
-- **iOS build/spuštění** — potřebuje **plný Xcode** (na tomto stroji byly jen Command Line
-  Tools; Xcode nejde nainstalovat z CLI). Na tvém Macu: `npm run cap:open:ios` → Run.
+- **Podpis (signing) + Apple účet:** v Xcode vybrat Team v *Signing & Capabilities* (vyžaduje
+  **Apple Developer Program 99 $/rok**). Bez něj jde build na simulátor, ne na zařízení/store.
 - **Push notifikace** nativně — plán níže (APNs klíč + FCM projekt).
-- **Účty:** Apple Developer Program (99 $/rok), Google Play (25 $ jednorázově).
-- **Podpis (signing), screenshoty, popisy, odeslání do storů** — jen na tvém Macu.
+- **Účty:** Apple Developer (99 $/rok), Google Play (25 $ jednorázově).
+- **Screenshoty, popisy, odeslání do storů** — v Xcode (Archive → Distribute) / Android Studio.
 - (Volitelně) **Service worker** pro plné PWA offline — pro Capacitor hybrid není nutný.
 
 ## Build — krok za krokem
