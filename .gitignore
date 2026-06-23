@@ -53,3 +53,7 @@ backups/
 /android/app/build/
 /android/app/src/main/assets/public/
 .DS_Store
+
+# @capacitor/assets PWA side-output (Next generuje manifest přes app/manifest.ts)
+/icons/
+public/manifest.webmanifest

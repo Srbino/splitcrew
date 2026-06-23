@@ -30,35 +30,45 @@ Důsledky:
 - Offline fallback obrazovka.
 - npm scripty pro celý Capacitor workflow.
 
+## Co je HOTOVÉ navíc (toolchain + projekty) ✅
+- Nainstalovaný toolchain: **JDK 21** (`openjdk@21`), **Android SDK** (cmdline-tools,
+  platform-tools, android-35, build-tools 35.0.0), **CocoaPods** (pro jistotu; Capacitor 8
+  iOS ale používá **Swift Package Manager**, Pody nejsou potřeba).
+- **Nativní projekty `android/` i `ios/` vygenerované a v repu** (`cap add`).
+- **Android APK se úspěšně builduje** (`./gradlew assembleDebug` → `app-debug.apk`, ověřeno).
+- iOS projekt (`ios/App/App.xcodeproj` + SPM `CapApp-SPM/Package.swift`) připravený k
+  otevření v Xcode.
+- Ikony + splash vygenerované do obou projektů (android 100, ios 13).
+
 ## Co NEMÁME / je potřeba dodělat ⚠️
-- **Nativní projekty `ios/` a `android/`** — generují se příkazem `cap add` (potřebují
-  Xcode / Android Studio, na tomto stroji nebyly k dispozici).
-- **Push notifikace** nativně — připravený plán níže (potřebuje APNs klíč + FCM projekt).
+- **iOS build/spuštění** — potřebuje **plný Xcode** (na tomto stroji byly jen Command Line
+  Tools; Xcode nejde nainstalovat z CLI). Na tvém Macu: `npm run cap:open:ios` → Run.
+- **Push notifikace** nativně — plán níže (APNs klíč + FCM projekt).
 - **Účty:** Apple Developer Program (99 $/rok), Google Play (25 $ jednorázově).
-- **Podpis, build, screenshoty, popisy, odeslání do storů** — jen na tvém Macu.
+- **Podpis (signing), screenshoty, popisy, odeslání do storů** — jen na tvém Macu.
 - (Volitelně) **Service worker** pro plné PWA offline — pro Capacitor hybrid není nutný.
 
-## Build — krok za krokem (na Macu)
+## Build — krok za krokem
 
-Předpoklady: **Xcode** (iOS) + **Android Studio**/JDK 21 (Android), CocoaPods (`sudo gem
-install cocoapods` nebo `brew install cocoapods`).
+Projekty už jsou vygenerované a v repu. Po `git clone` na jiném stroji stačí
+`npm install` a `npm run cap:sync`.
 
+**Android (funguje i z příkazové řádky):**
 ```bash
-# 1) přidat nativní platformy (jednorázově)
-npm run cap:add:ios
-npm run cap:add:android
-
-# 2) vygenerovat ikony a splash do nativních projektů
-npm run native:assets   # (přepíše assets/* ze stávající ikony — můžeš nahradit 1024² originálem)
-npm run cap:assets
-
-# 3) sync (po každé změně configu/pluginů)
+export JAVA_HOME="$(brew --prefix openjdk@21)"
+export ANDROID_HOME="$(brew --prefix)/share/android-commandlinetools"
 npm run cap:sync
-
-# 4) otevřít v IDE a spustit/podepsat
-npm run cap:open:ios       # → Xcode: vybrat tým, Run na zařízení/simulátoru
-npm run cap:open:android   # → Android Studio: Run, build APK/AAB
+cd android && ./gradlew assembleDebug     # → app/build/outputs/apk/debug/app-debug.apk
+# nebo ./gradlew bundleRelease pro AAB do Play Store (potřebuje keystore/podpis)
 ```
+
+**iOS (potřebuje plný Xcode):**
+```bash
+npm run cap:sync
+npm run cap:open:ios     # → Xcode: vyber Team (Signing & Capabilities), Run / Archive
+```
+
+**Po změně ikony** (`assets/icon.png` ideálně 1024²): `npm run native:assets && npm run cap:assets && npm run cap:sync`.
 
 Pozn.: appId je `cz.unify.crewsplit`, název „CrewSplit" — změň v `capacitor.config.ts`,
 pokud chceš jiné (před prvním `cap add`).
