@@ -121,6 +121,42 @@ základ) · grafy (máme) · bez reklam · branding/white-label (B2B) · offline
 - **Platby v1: QR Platba (CZ) hned** (non-custodial, zdarma). SEPA QR / Stripe Connect %
   později.
 
-## 13. Otevřená rozhodnutí — kolo 2 (k doplnění)
-Nový název (kandidáti), co přesně free vs Pro, jak se členové přidávají/identifikují,
-které průřezové featury do v1, branding/white-label pro B2B v1?
+## 13. Rozhodnutí — kolo 2 (locked 2026-06-23)
+
+**Identita členů:** join přes **odkaz + magic-link e-mail** (ověření e-mailem → umožní
+notifikace a návrat na jiném zařízení). Admin/operátor = plný účet (web registrace).
+
+**Free vs Pro (paywall):**
+| Funkce | Free | Pro |
+|---|---|---|
+| Dělení výdajů + vyrovnání (kdo komu dluží) | ✅ | ✅ |
+| QR Platba u vyrovnání | ✅ | ✅ |
+| Počet aktivních workspaců | 1 | víc / dokup |
+| Reklamy | nenásilné | bez reklam |
+| Finální PDF report / export | ❌ | ✅ |
+| OCR účtenek | ❌ | ✅ |
+| (B2B: branding, účastníci, klient report) | — | Business tier |
+
+**v1 průřezové featury:** QR Platba u vyrovnání · foto účtenek (bez OCR) · **offline režim**
+· opakované platby (nájem/energie).
+
+**Název: popisný anglický** (světově srozumitelný, dobrý i pro B2B). Shortlist k výběru:
+| Návrh | Proč |
+|---|---|
+| **Sharepot** | „shared pot" — sedí na cokoli (výlet, pivka, spolubydlení, B2B), netripové |
+| **GroupKitty** / Kitty | „kitty" = společná kasa; přirozené pro party i spolubydlení |
+| **OurTab** / GroupTab | „the tab" — peníze v centru, krátké |
+| **Sharebase** | platformové, B2B-friendly |
+| **Settly** | důraz na vyrovnání (settle) |
+| **TripKit** | silné pro výlety (ale víc tripové) |
+| **Crewly** | drží dědictví „crew", ale zobecňuje |
+> Před finálem ověřit volnou doménu (.com/.cz) + ochrannou známku.
+
+## 14. v1 scope (shrnutí)
+- **Základ (P0):** multi-tenant workspacy, web registrace (admin) + magic-link členové,
+  entitlementy (free/Pro/Business), migrace stávajícího plachtařského tripu → 1. workspace.
+- **Platforma (P1):** moduly per workspace + **4 šablony** (jen rozpočítat/výlet, plachtění,
+  roadtrip, zájezdovka), generalizace loď→skupina.
+- **Monetizace (P2, paralelně consumer+B2B):** Stripe na webu, Captain Pro paywall (workspacy/
+  report/OCR/bez reklam), Business tier (branding/účastníci/report), **QR Platba**.
+- **v1 featury:** QR Platba, foto účtenek, offline, opakované platby.
