@@ -166,6 +166,34 @@ notifikace a návrat na jiném zařízení). Admin/operátor = plný účet (web
 - **Nové šablony: Domácnost/Spolubydlení a Auto** (opakované náklady).
 - **Pluginová architektura** modulů od začátku → pozdější **mini-marketplace** (P4+).
 
+## 13c. Sjednocující model + katalog modulů (kolo 4)
+**Jednota:** vše = jeden **ledger (transakce) + účty + členové + moduly** v workspace.
+Osobní finance = 1 člen; sdílené = víc členů; kasa = sdílený účet; recurring = naplánované
+transakce; banka = importované transakce.
+
+**Katalog modulů (pluginy):**
+- *Jádro (free, vždy):* Výdaje+vyrovnání, QR platba.
+- *Sdílené peníze:* Kasa (kitty), Pravidelné platby, IOU/dluhy.
+- *Koordinace (lehké):* Kalendář+upomínky, Checklist/úkoly, Nákupy/inventář, Jídelníček,
+  Itinerář, Dokumenty, Deník, Skupiny/auta/pokoje.
+- *Osobní finance (fáze 2):* osobní výdaje/příjmy, rozpočty, účty/zůstatky, **bank sync (PSD2)**,
+  spořicí cíle, reporty.
+- *Sociální/wallet:* peněženka člena, aktivita feed, komentáře/chat.
+- *B2B:* účastníci, branding/white-label, splátky, klient report, Stripe Connect.
+- *Power (placené):* OCR, multi-měna, export/PDF, offline, přílohy.
+
+> Bank sync = vstup do kategorie osobních financí (konkurence **Spendee** [CZ], YNAB) →
+> Pro/fáze 2, ne v1; architektura ho má umožnit jako modul.
+
+## 13d. Paywall model — „vyber si N modulů" (kolo 4, locked směr)
+- **Free:** jádro (výdaje+vyrovnání+QR) vždy + **až 3 moduly z „lehkého/koordinačního poolu"**
+  + **1 workspace** + nenásilné reklamy.
+- **Pro:** **všechny moduly + víc workspaců** + power (OCR, export, **recurring**, **bank sync**,
+  bez reklam). *Peníze-generující moduly (recurring, bank sync, OCR, export) NEJSOU ve free
+  poolu.*
+- **Business:** B2B (branding, účastníci, Stripe Connect, klient report).
+- Gating přes `workspace_modules` + entitlementy (count/typ modulů) — čistě v plugin systému.
+
 ## 14. v1 scope (shrnutí)
 - **Základ (P0):** multi-tenant workspacy, web registrace (admin) + magic-link členové,
   entitlementy (free/Pro/Business), migrace stávajícího plachtařského tripu → 1. workspace.
