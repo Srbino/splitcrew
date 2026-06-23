@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
+import { NativeBridge } from '@/components/native/native-bridge';
 
 export const metadata: Metadata = {
   title: 'SplitCrew',
@@ -49,7 +50,10 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className="min-h-screen bg-background text-foreground antialiased">{children}</body>
+      <body className="min-h-screen bg-background text-foreground antialiased">
+        <NativeBridge />
+        {children}
+      </body>
     </html>
   );
 }

@@ -43,3 +43,13 @@ rzvrep.sql
 
 # Local DB backups (production data — never commit)
 backups/
+
+# Capacitor native build artifacts (native projects are generated via `npx cap add`)
+/ios/App/Pods/
+/ios/App/build/
+/ios/App/App/public/
+/android/.gradle/
+/android/build/
+/android/app/build/
+/android/app/src/main/assets/public/
+.DS_Store
