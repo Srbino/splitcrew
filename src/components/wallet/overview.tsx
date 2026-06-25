@@ -193,13 +193,10 @@ function SettlementChart({
     push(outMap, s.from_user_id, s);
   }
 
-  const N = payers.length || 1;
-  const avg = payers.reduce((a, p) => a + p.total, 0) / N;
   const axisMax = Math.max(1, ...payers.map(p => {
     const nt = netMap.get(p.paid_by) ?? 0;
     return Math.max(p.total, p.total - nt); // debtor share = paid + |net|
   }));
-  const avgPct = (avg / axisMax) * 100;
 
   return (
     <Card>
@@ -208,7 +205,7 @@ function SettlementChart({
           <Scale size={13} /> {t('wallet.settleTitle')}
         </h3>
         <p className="text-[11px] text-muted-foreground mb-4 leading-snug">
-          {t('wallet.settleHint', { avg: formatCurrency(toDisplay(avg), baseCurrency), avgczk: fmtCzk(avg) })}
+          {t('wallet.settleHint')}
         </p>
         <div className="space-y-3.5">
           {payers.map(p => {
@@ -219,6 +216,7 @@ function SettlementChart({
             const isDebtor = nt < -0.005;
             const solidW = ((isCreditor ? share : paid) / axisMax) * 100;
             const extraW = (Math.abs(nt) / axisMax) * 100;
+            const sharePct = (share / axisMax) * 100; // this person's own fair-share line
             const ins = inMap.get(p.paid_by) ?? [];
             const outs = outMap.get(p.paid_by) ?? [];
             return (
@@ -262,14 +260,10 @@ function SettlementChart({
                         style={{ width: `${extraW}%` }}
                       />
                     )}
-                    {/* average per-person line (dash-dot) */}
+                    {/* this person's own fair-share line (what they level to) */}
                     <div
-                      className="absolute inset-y-0 w-px"
-                      style={{
-                        left: `${avgPct}%`,
-                        backgroundImage:
-                          'repeating-linear-gradient(to bottom, var(--foreground) 0px, var(--foreground) 2px, transparent 2px, transparent 4px)',
-                      }}
+                      className="absolute inset-y-0 w-0.5 bg-foreground/70"
+                      style={{ left: `calc(${sharePct}% - 1px)` }}
                     />
                   </div>
                   <div className="text-[10px] text-muted-foreground mt-0.5 tabular-nums">

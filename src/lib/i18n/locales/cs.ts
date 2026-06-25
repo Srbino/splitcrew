@@ -169,7 +169,7 @@ const cs: Translations = {
     overviewWhoOwes: 'Kdo komu dluží',
     paymentsToSettle: '{{count}} plateb vyrovná všechny — minimální možný počet',
     settleTitle: 'Vyrovnání — kdo komu dluží',
-    settleHint: 'Svislá čerchovaná čára = průměr na osobu {{avg}} ({{avgczk}}). Vyšrafováno = částka k vyrovnání. Pod čarou: kdo komu zaplatí, v € i Kč (kurz 24,20).',
+    settleHint: 'Svislá značka u každého = jeho férový podíl (jen z výdajů, kterých se účastnil). Vyšrafováno = částka k vyrovnání. Pod sloupcem: kdo komu zaplatí, v € i Kč (kurz 24,20).',
     settlePaid: 'Zaplatil',
     matrixTitle: 'Kdo kolik zaplatil podle kategorií',
     matrixTitleCost: 'Kolik koho stála dovolená podle kategorií',
