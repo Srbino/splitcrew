@@ -2,12 +2,12 @@
 
 import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowRight, PieChart, Users, Receipt, TrendingUp, Table2, Ship, Scale } from 'lucide-react';
+import { ArrowRight, PieChart, Receipt, TrendingUp, Table2, Ship, Scale } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { cn, getInitials, avatarColorClass, formatDate } from '@/lib/utils';
 import { formatCurrency } from '@/lib/currencies';
-import { donutSegments, barScale } from '@/lib/wallet-calc';
+import { donutSegments } from '@/lib/wallet-calc';
 
 // Fixed CZK rate for the final settlement payout (the crew sends each other CZK,
 // not EUR). EUR stays the canonical/validated amount; CZK is shown alongside it.
@@ -124,41 +124,6 @@ function Donut({
           </div>
         ))}
       </div>
-    </div>
-  );
-}
-
-// ── Per-person spend bars ──
-
-function PayerBars({
-  payers, toDisplay, baseCurrency,
-}: {
-  payers: PayerSlice[];
-  toDisplay: (eur: number) => number;
-  baseCurrency: string;
-}) {
-  const widths = barScale(payers.map(p => p.total));
-  return (
-    <div className="space-y-2.5">
-      {payers.map((p, i) => (
-        <div key={p.paid_by} className="flex items-center gap-3">
-          <Avi name={p.name} avatar={p.avatar} userId={p.paid_by} />
-          <div className="flex-1 min-w-0">
-            <div className="flex justify-between items-baseline gap-2 mb-1">
-              <span className="text-sm font-medium truncate">{p.name}</span>
-              <span className="text-sm tabular-nums shrink-0">{formatCurrency(toDisplay(p.total), baseCurrency)}</span>
-            </div>
-            <div className="h-2 rounded-full bg-muted overflow-hidden">
-              <motion.div
-                className="h-full rounded-full bg-primary"
-                initial={{ width: 0 }}
-                animate={{ width: `${widths[i]}%` }}
-                transition={{ duration: 0.5, delay: i * 0.03 }}
-              />
-            </div>
-          </div>
-        </div>
-      ))}
     </div>
   );
 }
@@ -509,7 +474,6 @@ export function WalletOverview({
   }
 
   const { summary, by_category, by_payer, settlements } = data;
-  const outstanding = settlements.filter(s => !s.is_settled);
 
   const stat = (icon: React.ReactNode, label: string, value: string) => (
     <Card className="py-0">
@@ -539,17 +503,7 @@ export function WalletOverview({
         </CardContent>
       </Card>
 
-      {/* Per-person spend */}
-      <Card>
-        <CardContent className="p-4">
-          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4 flex items-center gap-1.5">
-            <Users size={13} /> {t('wallet.overviewByPerson')}
-          </h3>
-          <PayerBars payers={by_payer} toDisplay={toDisplay} baseCurrency={baseCurrency} />
-        </CardContent>
-      </Card>
-
-      {/* Settlement leveling chart — levels everyone to their fair share */}
+      {/* Per-person settlement chart — paid bars + fair-share line + who pays whom */}
       {by_payer.length > 0 && (
         <SettlementChart
           payers={by_payer}
@@ -599,40 +553,6 @@ export function WalletOverview({
         />
       )}
 
-      {/* Who owes whom */}
-      <Card>
-        <CardContent className="p-4">
-          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1 flex items-center gap-1.5">
-            <ArrowRight size={13} /> {t('wallet.overviewWhoOwes')}
-          </h3>
-          {outstanding.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-2">{t('wallet.allSettledUp')}</p>
-          ) : (<>
-            <p className="text-xs text-muted-foreground mb-3">{t('wallet.paymentsToSettle', { count: outstanding.length })}</p></>
-          )}
-          {outstanding.length > 0 && (
-            <div className="space-y-2">
-              {outstanding.map(s => (
-                <div key={`${s.from_user_id}-${s.to_user_id}`} className="flex items-center gap-2.5 text-sm">
-                  <Avi name={s.from_name} avatar={s.from_avatar} userId={s.from_user_id} />
-                  <span className="font-medium truncate">{s.from_name}</span>
-                  <ArrowRight size={14} className="text-muted-foreground shrink-0" />
-                  <Avi name={s.to_name} avatar={s.to_avatar} userId={s.to_user_id} />
-                  <span className="font-medium truncate">{s.to_name}</span>
-                  <span className="ml-auto text-right shrink-0 leading-tight">
-                    <span className="block font-bold tabular-nums text-destructive">
-                      {formatCurrency(toDisplay(s.amount), baseCurrency)}
-                    </span>
-                    <span className="block text-[11px] font-medium tabular-nums text-muted-foreground">
-                      {fmtCzk(s.amount)}
-                    </span>
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
     </motion.div>
   );
 }

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus, Pencil, Trash2, Check, X, ArrowRight,
-  Receipt, BarChart3, Handshake, RefreshCw, ChevronDown,
+  Receipt, Handshake, RefreshCw, ChevronDown,
   PieChart, Lock, Unlock, Clock, AlertCircle, Users,
 } from 'lucide-react';
 import { WalletOverview, type SummaryData } from '@/components/wallet/overview';
@@ -48,17 +48,6 @@ interface Expense {
   created_at: string;
   split_user_ids: number[];
   split_amounts: Record<number, number>;
-}
-
-interface UserBalance {
-  user_id: number;
-  name: string;
-  avatar: string | null;
-  boat_id: number;
-  boat_name: string;
-  paid: number;
-  share: number;
-  balance: number;
 }
 
 interface Settlement {
@@ -195,7 +184,7 @@ const cardVariants = {
 
 // ── Main Page Component ──
 
-type TabId = 'overview' | 'expenses' | 'balances' | 'settlements';
+type TabId = 'overview' | 'expenses' | 'settlements';
 
 interface BoatInfo {
   id: number;
@@ -245,9 +234,6 @@ export default function WalletPage() {
   const [filter, setFilter] = useState('all');
   const [loadingExpenses, setLoadingExpenses] = useState(true);
 
-  // Balances state
-  const [balances, setBalances] = useState<UserBalance[]>([]);
-  const [loadingBalances, setLoadingBalances] = useState(false);
 
   // Settlements state
   const [settlements, setSettlements] = useState<Settlement[]>([]);
@@ -298,8 +284,6 @@ export default function WalletPage() {
       loadSummary();
     } else if (activeTab === 'expenses') {
       loadExpenses();
-    } else if (activeTab === 'balances') {
-      loadBalances();
     } else if (activeTab === 'settlements') {
       loadSettlements();
     }
@@ -382,21 +366,6 @@ export default function WalletPage() {
     }
     setLoadingExpenses(false);
   }, [filter]);
-
-  const loadBalances = useCallback(async () => {
-    setLoadingBalances(true);
-    const res = await apiCall<{
-      balances: UserBalance[];
-      base_currency: string;
-      display_rate: number;
-    }>('/api/wallet?action=balances');
-    if (res.success && res.data) {
-      setBalances(res.data.balances);
-      setBaseCurrency(res.data.base_currency);
-      if (res.data.display_rate != null) setDisplayRate(res.data.display_rate);
-    }
-    setLoadingBalances(false);
-  }, []);
 
   const loadSettlements = useCallback(async () => {
     setLoadingSettlements(true);
@@ -790,7 +759,6 @@ export default function WalletPage() {
         {([
           { id: 'overview' as TabId, icon: PieChart, label: t('wallet.overview') },
           { id: 'expenses' as TabId, icon: Receipt, label: t('wallet.expenses') },
-          { id: 'balances' as TabId, icon: BarChart3, label: t('wallet.balances') },
           { id: 'settlements' as TabId, icon: Handshake, label: t('wallet.settlements') },
         ] as const).map(tab => (
           <button
@@ -922,16 +890,6 @@ export default function WalletPage() {
               setShowDeleteConfirm(true);
             }}
             onAudit={handleShowAudit}
-            t={t}
-          />
-        )}
-
-        {activeTab === 'balances' && (
-          <BalancesTab
-            balances={balances}
-            baseCurrency={baseCurrency}
-            toDisplay={toDisplay}
-            loading={loadingBalances}
             t={t}
           />
         )}
@@ -1403,94 +1361,6 @@ function ExpenseCard({
         </DropdownMenu>
       </CardContent>
     </Card>
-  );
-}
-
-// ── Balances Tab ──
-
-function BalancesTab({
-  balances,
-  baseCurrency,
-  toDisplay,
-  loading,
-  t,
-}: {
-  balances: UserBalance[];
-  baseCurrency: string;
-  toDisplay: (eur: number) => number;
-  loading: boolean;
-  t: (key: string) => string;
-}) {
-  if (loading) {
-    return (
-      <div className="text-center py-10 text-muted-foreground">
-        <RefreshCw size={24} className="animate-spin mx-auto" />
-        <p className="mt-2">{t('common.loading')}</p>
-      </div>
-    );
-  }
-
-  const activeBalances = balances.filter(b => b.paid !== 0 || b.share !== 0);
-
-  if (activeBalances.length === 0) {
-    return (
-      <div className="text-center py-10 text-muted-foreground">
-        <BarChart3 size={48} className="opacity-30 mx-auto mb-3" />
-        <p>{t('wallet.noExpenses')}</p>
-      </div>
-    );
-  }
-
-  return (
-    <motion.div className="flex flex-col gap-3" variants={listVariants} initial="hidden" animate="visible">
-      {/* Header row */}
-      <div className="grid grid-cols-[1fr_90px_90px_90px] gap-4 px-5 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-        <span>Name</span>
-        <span className="text-right">{t('dashboard.paid')}</span>
-        <span className="text-right">Share</span>
-        <span className="text-right">Balance</span>
-      </div>
-
-      {activeBalances.map(b => {
-        const isPositive = b.balance > 0.01;
-        const isNegative = b.balance < -0.01;
-
-        return (
-          <motion.div key={b.user_id} variants={cardVariants}>
-            <Card className="py-0">
-              <CardContent className="grid grid-cols-[1fr_90px_90px_90px] gap-4 items-center px-5 py-4">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <UserAvatar name={b.name} avatar={b.avatar} userId={b.user_id} />
-                  <div className="min-w-0">
-                    <div className="font-semibold text-sm truncate">
-                      {b.name}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {b.boat_name}
-                    </div>
-                  </div>
-                </div>
-                <span className="text-right text-sm tabular-nums">
-                  {formatCurrency(toDisplay(b.paid), baseCurrency)}
-                </span>
-                <span className="text-right text-sm tabular-nums">
-                  {formatCurrency(toDisplay(b.share), baseCurrency)}
-                </span>
-                <span
-                  className={cn(
-                    'text-right font-bold text-sm tabular-nums',
-                    isPositive && 'text-green-600 dark:text-green-400',
-                    isNegative && 'text-destructive',
-                  )}
-                >
-                  {b.balance > 0 ? '+' : ''}{formatCurrency(toDisplay(b.balance), baseCurrency)}
-                </span>
-              </CardContent>
-            </Card>
-          </motion.div>
-        );
-      })}
-    </motion.div>
   );
 }
 
