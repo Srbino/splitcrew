@@ -2,7 +2,8 @@
 
 import { useRef } from 'react';
 import { useState } from 'react';
-import { ChevronDown, Moon, Sun, LogOut, Camera, Sailboat, Languages, KeyRound } from 'lucide-react';
+import { ChevronDown, Moon, Sun, LogOut, Camera, Sailboat, Languages, KeyRound, Landmark } from 'lucide-react';
+import { toIban } from '@/lib/czech-payment';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -37,6 +38,40 @@ export function UserDropdown({ user, theme, locale, onToggleTheme, onToggleLocal
   const [newPw, setNewPw] = useState('');
   const [pwSaving, setPwSaving] = useState(false);
   const [pwMessage, setPwMessage] = useState('');
+
+  const [showBankModal, setShowBankModal] = useState(false);
+  const [bankValue, setBankValue] = useState('');
+  const [bankSaving, setBankSaving] = useState(false);
+  const [bankMessage, setBankMessage] = useState('');
+
+  async function openBankModal() {
+    setBankMessage('');
+    setShowBankModal(true);
+    const res = await fetch('/api/auth/bank');
+    const data = await res.json();
+    if (data.success) setBankValue(data.data?.bank_account || '');
+  }
+
+  async function handleSaveBank() {
+    setBankSaving(true);
+    setBankMessage('');
+    const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+    const res = await fetch('/api/auth/bank', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+      body: JSON.stringify({ bank_account: bankValue.trim() }),
+    });
+    const data = await res.json();
+    setBankSaving(false);
+    if (data.success) {
+      setBankMessage('✓ ' + (locale === 'cs' ? 'Uloženo' : 'Saved'));
+      setTimeout(() => { setShowBankModal(false); setBankMessage(''); }, 1200);
+    } else {
+      setBankMessage(data.error || 'Error');
+    }
+  }
+
+  const bankPreviewIban = bankValue.trim() ? toIban(bankValue) : null;
 
   async function handleChangePassword() {
     if (!currentPw || !newPw || newPw.length < 4) return;
@@ -145,6 +180,11 @@ export function UserDropdown({ user, theme, locale, onToggleTheme, onToggleLocal
             <span>{t('auth.password')}</span>
           </DropdownMenuItem>
 
+          <DropdownMenuItem onClick={openBankModal} className="cursor-pointer">
+            <Landmark size={16} />
+            <span>{t('wallet.bankAccount')}</span>
+          </DropdownMenuItem>
+
           <DropdownMenuItem onClick={onLogout} className="cursor-pointer text-destructive focus:text-destructive">
             <LogOut size={16} />
             <span>{t('auth.logout')}</span>
@@ -193,6 +233,54 @@ export function UserDropdown({ user, theme, locale, onToggleTheme, onToggleLocal
                   className="px-3 py-1.5 text-sm rounded-md bg-primary text-primary-foreground cursor-pointer border-none disabled:opacity-50 hover:opacity-90 transition-opacity"
                 >
                   {pwSaving ? t('common.saving') : t('common.save')}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bank account modal (for QR Platba) */}
+      {showBankModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setShowBankModal(false)}>
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+          <div className="relative w-full max-w-sm rounded-xl bg-card border border-border shadow-lg p-5" onClick={e => e.stopPropagation()}>
+            <h3 className="text-base font-semibold mb-1 flex items-center gap-2">
+              <Landmark size={16} /> {t('wallet.bankAccount')}
+            </h3>
+            <p className="text-xs text-muted-foreground mb-4">{t('wallet.bankAccountHint')}</p>
+            {bankMessage && (
+              <div className={`text-sm mb-3 px-3 py-2 rounded-lg ${bankMessage.startsWith('✓') ? 'bg-success-subtle text-success' : 'bg-destructive/10 text-destructive'}`}>
+                {bankMessage}
+              </div>
+            )}
+            <div className="space-y-2">
+              <input
+                type="text"
+                inputMode="text"
+                autoComplete="off"
+                placeholder="123456789/0800"
+                value={bankValue}
+                onChange={e => setBankValue(e.target.value)}
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              />
+              {bankValue.trim() && (
+                bankPreviewIban ? (
+                  <p className="text-xs text-success tabular-nums">IBAN: {bankPreviewIban}</p>
+                ) : (
+                  <p className="text-xs text-destructive">{t('wallet.bankAccountInvalid')}</p>
+                )
+              )}
+              <div className="flex gap-2 justify-end pt-1">
+                <button onClick={() => setShowBankModal(false)} className="px-3 py-1.5 text-sm rounded-md border border-border bg-transparent cursor-pointer hover:bg-accent transition-colors">
+                  {t('common.cancel')}
+                </button>
+                <button
+                  onClick={handleSaveBank}
+                  disabled={bankSaving || (bankValue.trim() !== '' && !bankPreviewIban)}
+                  className="px-3 py-1.5 text-sm rounded-md bg-primary text-primary-foreground cursor-pointer border-none disabled:opacity-50 hover:opacity-90 transition-opacity"
+                >
+                  {bankSaving ? t('common.saving') : t('common.save')}
                 </button>
               </div>
             </div>

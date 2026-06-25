@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus, Pencil, Trash2, Check, X, ArrowRight,
   Receipt, Handshake, RefreshCw, ChevronDown,
-  PieChart, Lock, Unlock, Clock, AlertCircle, Users,
+  PieChart, Lock, Unlock, Clock, AlertCircle, Users, QrCode,
 } from 'lucide-react';
 import { WalletOverview, type SummaryData } from '@/components/wallet/overview';
 import { Modal } from '@/components/shared/modal';
@@ -24,7 +24,9 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { cn, getInitials, avatarColorClass } from '@/lib/utils';
 import { useI18n } from '@/lib/i18n/context';
-import { CURRENCIES, CURRENCY_CODES, formatCurrency, getCurrency, TRIP_CZK_RATE } from '@/lib/currencies';
+import { CURRENCIES, CURRENCY_CODES, formatCurrency, getCurrency, TRIP_CZK_RATE, formatTripCzk } from '@/lib/currencies';
+import { spaydForPayment, toIban } from '@/lib/czech-payment';
+import { QRCodeSVG } from 'qrcode.react';
 import { formatDate, formatDateTime } from '@/lib/utils';
 
 // ── Types ──
@@ -57,6 +59,7 @@ interface Settlement {
   to_user_id: number;
   to_name: string;
   to_avatar: string | null;
+  to_bank_account?: string | null;
   amount: number;
   is_settled: boolean;
 }
@@ -1383,6 +1386,8 @@ function SettlementsTab({
   onToggleSettle: (s: Settlement) => void;
   t: (key: string, params?: Record<string, string | number>) => string;
 }) {
+  const [openQr, setOpenQr] = useState<string | null>(null);
+
   if (loading) {
     return (
       <div className="text-center py-10 text-muted-foreground">
@@ -1407,76 +1412,114 @@ function SettlementsTab({
 
   return (
     <motion.div className="flex flex-col gap-3" variants={listVariants} initial="hidden" animate="visible">
-      {settlements.map((s) => (
+      {settlements.map((s) => {
+        const pairKey = `${s.from_user_id}-${s.to_user_id}`;
+        const czk = Math.round(s.amount * TRIP_CZK_RATE * 100) / 100;
+        const spayd = spaydForPayment(s.to_bank_account, czk, s.from_name);
+        return (
         <motion.div key={`${s.from_user_id}-${s.to_user_id}`} variants={cardVariants}>
           <Card
             className={cn('py-0', s.is_settled && 'opacity-60')}
           >
-            <CardContent className="flex items-center gap-3.5 flex-wrap px-5 py-4">
-              {/* From user */}
-              <div className="flex items-center gap-2 min-w-0">
-                <UserAvatar name={s.from_name} avatar={s.from_avatar} userId={s.from_user_id} />
-                <span className="font-semibold text-sm whitespace-nowrap">
-                  {s.from_name}
-                </span>
-              </div>
-
-              <ArrowRight size={16} className="text-muted-foreground shrink-0" />
-
-              {/* To user */}
-              <div className="flex items-center gap-2 min-w-0">
-                <UserAvatar name={s.to_name} avatar={s.to_avatar} userId={s.to_user_id} />
-                <span className="font-semibold text-sm whitespace-nowrap">
-                  {s.to_name}
-                </span>
-              </div>
-
-              {/* Amount */}
-              <div className="ml-auto text-right shrink-0">
-                <div className="font-bold text-base text-destructive">
-                  {formatCurrency(toDisplay(s.amount), baseCurrency)}
+            <CardContent className="px-5 py-4">
+              <div className="flex items-center gap-3.5 flex-wrap">
+                {/* From user */}
+                <div className="flex items-center gap-2 min-w-0">
+                  <UserAvatar name={s.from_name} avatar={s.from_avatar} userId={s.from_user_id} />
+                  <span className="font-semibold text-sm whitespace-nowrap">
+                    {s.from_name}
+                  </span>
                 </div>
-                {showCurrencies.length > 0 && (
-                  <div className="text-xs text-muted-foreground">
-                    {showCurrencies.map(c => {
-                      // CZK uses the actual trip rate (what the crew transacted at);
-                      // any other currency falls back to the live cached rate.
-                      const isCzk = c === 'CZK';
-                      const rate = isCzk ? TRIP_CZK_RATE : (exchangeRates[c] ?? 1);
-                      const converted = Math.round(s.amount * rate * 100) / 100;
-                      return (
-                        <span key={c} className="mr-2">
-                          {formatCurrency(converted, c, isCzk ? 'cs-CZ' : 'en-US')}
-                        </span>
-                      );
-                    })}
+
+                <ArrowRight size={16} className="text-muted-foreground shrink-0" />
+
+                {/* To user */}
+                <div className="flex items-center gap-2 min-w-0">
+                  <UserAvatar name={s.to_name} avatar={s.to_avatar} userId={s.to_user_id} />
+                  <span className="font-semibold text-sm whitespace-nowrap">
+                    {s.to_name}
+                  </span>
+                </div>
+
+                {/* Amount */}
+                <div className="ml-auto text-right shrink-0">
+                  <div className="font-bold text-base text-destructive">
+                    {formatCurrency(toDisplay(s.amount), baseCurrency)}
                   </div>
+                  {showCurrencies.length > 0 && (
+                    <div className="text-xs text-muted-foreground">
+                      {showCurrencies.map(c => {
+                        // CZK uses the actual trip rate (what the crew transacted at);
+                        // any other currency falls back to the live cached rate.
+                        const isCzk = c === 'CZK';
+                        const rate = isCzk ? TRIP_CZK_RATE : (exchangeRates[c] ?? 1);
+                        const converted = Math.round(s.amount * rate * 100) / 100;
+                        return (
+                          <span key={c} className="mr-2">
+                            {formatCurrency(converted, c, isCzk ? 'cs-CZ' : 'en-US')}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* QR pay button (only if the recipient has a payable account) */}
+                {spayd && (
+                  <Button
+                    variant={openQr === pairKey ? 'default' : 'outline'}
+                    size="sm"
+                    className="shrink-0"
+                    onClick={() => setOpenQr(openQr === pairKey ? null : pairKey)}
+                    aria-expanded={openQr === pairKey}
+                  >
+                    <QrCode size={14} />
+                    <span>QR</span>
+                  </Button>
                 )}
+
+                {/* Settle button */}
+                <Button
+                  variant={s.is_settled ? 'outline' : 'default'}
+                  size="sm"
+                  className="shrink-0"
+                  onClick={() => onToggleSettle(s)}
+                >
+                  {s.is_settled ? (
+                    <>
+                      <X size={14} />
+                      <span>{t('wallet.unmarkSettled')}</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check size={14} />
+                      <span>{t('wallet.markSettled')}</span>
+                    </>
+                  )}
+                </Button>
               </div>
 
-              {/* Settle button */}
-              <Button
-                variant={s.is_settled ? 'outline' : 'default'}
-                size="sm"
-                className="shrink-0"
-                onClick={() => onToggleSettle(s)}
-              >
-                {s.is_settled ? (
-                  <>
-                    <X size={14} />
-                    <span>{t('wallet.unmarkSettled')}</span>
-                  </>
-                ) : (
-                  <>
-                    <Check size={14} />
-                    <span>{t('wallet.markSettled')}</span>
-                  </>
-                )}
-              </Button>
+              {/* QR code panel — scan in any Czech banking app */}
+              {spayd && openQr === pairKey && (
+                <div className="mt-4 flex flex-col items-center gap-2 border-t border-border pt-4">
+                  <div className="rounded-lg bg-white p-3">
+                    <QRCodeSVG value={spayd} size={184} level="M" />
+                  </div>
+                  <div className="text-center">
+                    <div className="font-bold tabular-nums">{formatTripCzk(s.amount)}</div>
+                    <div className="text-xs text-muted-foreground">{t('wallet.qrScanHint', { name: s.to_name })}</div>
+                    <div className="mt-1 text-[11px] tabular-nums text-muted-foreground/70 break-all">{toIban(s.to_bank_account)}</div>
+                  </div>
+                </div>
+              )}
+              {!spayd && !s.is_settled && (
+                <div className="mt-2 text-[11px] text-muted-foreground/70">{t('wallet.qrNoAccount', { name: s.to_name })}</div>
+              )}
             </CardContent>
           </Card>
         </motion.div>
-      ))}
+        );
+      })}
     </motion.div>
   );
 }

@@ -312,6 +312,7 @@ async function handleSettlements() {
     to_user_id: s.to_user_id,
     to_name: userMap[s.to_user_id]?.name || 'Unknown',
     to_avatar: userMap[s.to_user_id]?.avatar || null,
+    to_bank_account: userMap[s.to_user_id]?.bank_account || null,
     amount: s.amount,
     is_settled: settledSet.has(`${s.from_user_id}-${s.to_user_id}`),
   }));

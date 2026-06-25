@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS users (
     phone         VARCHAR(50)  DEFAULT NULL,
     email         VARCHAR(150) DEFAULT NULL,
     avatar        TEXT         DEFAULT NULL,
+    bank_account  VARCHAR(50)  DEFAULT NULL,           -- Czech account number or IBAN, for QR Platba
     password_hash VARCHAR(200) DEFAULT NULL,
     role          VARCHAR(20)  NOT NULL DEFAULT 'crew',
     boat_id       INT          NOT NULL DEFAULT 1,
