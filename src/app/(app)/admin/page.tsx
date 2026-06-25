@@ -17,6 +17,7 @@ import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { cn, getInitials, avatarColorClass, formatDateTime } from '@/lib/utils';
 import { CURRENCY_CODES, CURRENCIES, formatCurrency } from '@/lib/currencies';
+import { describeAccount } from '@/lib/czech-payment';
 import { LOCALES } from '@/lib/i18n';
 import { Logo, LOGO_COLORS, logoColorClass } from '@/components/shared/logo';
 import { useI18n } from '@/lib/i18n/context';
@@ -29,6 +30,7 @@ interface UserData {
   phone: string | null;
   email: string | null;
   avatar: string | null;
+  bank_account: string | null;
   role: string;
   boat_id: number;
   boat_name: string;
@@ -182,6 +184,7 @@ export default function AdminPage() {
   const [formName, setFormName] = useState('');
   const [formPhone, setFormPhone] = useState('');
   const [formEmail, setFormEmail] = useState('');
+  const [formBank, setFormBank] = useState('');
   const [formBoatId, setFormBoatId] = useState(0);
   const [formRole, setFormRole] = useState<'crew' | 'captain'>('crew');
   const [formPassword, setFormPassword] = useState('');
@@ -415,6 +418,7 @@ export default function AdminPage() {
     setFormAvatarRemove(false);
     setFormPhone('');
     setFormEmail('');
+    setFormBank('');
     setFormPassword('');
     setFormBoatId(boats[0]?.id || 0);
     setFormRole('crew');
@@ -429,6 +433,7 @@ export default function AdminPage() {
     setFormAvatarRemove(false);
     setFormPhone(user.phone || '');
     setFormEmail(user.email || '');
+    setFormBank(user.bank_account || '');
     setFormPassword('');
     setFormBoatId(user.boat_id);
     setFormRole((user as UserData & { role?: string }).role === 'captain' ? 'captain' : 'crew');
@@ -455,6 +460,7 @@ export default function AdminPage() {
           name: formName.trim(),
           phone: formPhone.trim() || null,
           email: formEmail.trim() || null,
+          bank_account: formBank.trim() || null,
           boat_id: formBoatId,
           role: formRole,
         }
@@ -463,6 +469,7 @@ export default function AdminPage() {
           name: formName.trim(),
           phone: formPhone.trim() || null,
           email: formEmail.trim() || null,
+          bank_account: formBank.trim() || null,
           boat_id: formBoatId,
           role: formRole,
           password: formPassword,
@@ -1456,6 +1463,24 @@ export default function AdminPage() {
             onChange={e => setFormEmail(e.target.value)}
             placeholder="email@example.com"
           />
+        </div>
+        <div className="space-y-2 mb-4">
+          <Label>{t('wallet.bankAccount')}</Label>
+          <Input
+            value={formBank}
+            onChange={e => setFormBank(e.target.value)}
+            placeholder="123456789/0800"
+          />
+          {formBank.trim() && (() => {
+            const info = describeAccount(formBank);
+            return info ? (
+              <p className="text-xs text-success tabular-nums">
+                {info.iban}{info.bankName ? ` · ${info.bankName}` : ''}
+              </p>
+            ) : (
+              <p className="text-xs text-destructive">{t('wallet.bankAccountInvalid')}</p>
+            );
+          })()}
         </div>
         {!editingUser && (
           <div className="space-y-2 mb-4">

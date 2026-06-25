@@ -2,6 +2,7 @@ import { getSession, requireCsrf } from '@/lib/auth';
 import { query, queryOne, execute, getAllUsers } from '@/lib/db';
 import { apiSuccess, apiError } from '@/lib/utils';
 import { hashPassword } from '@/lib/bcrypt';
+import { toIban } from '@/lib/czech-payment';
 
 export async function GET() {
   try {
@@ -34,7 +35,7 @@ export async function POST(request: Request) {
     const { action } = body;
 
     if (action === 'add') {
-      const { name, phone, email, boat_id, password, role } = body;
+      const { name, phone, email, boat_id, password, role, bank_account } = body;
       if (!name || !boat_id) {
         return apiError('Name and boat are required.');
       }
@@ -43,25 +44,36 @@ export async function POST(request: Request) {
       }
       const validRole = role === 'captain' ? 'captain' : 'crew';
 
+      const bank = typeof bank_account === 'string' ? bank_account.trim() : '';
+      if (bank && !toIban(bank)) {
+        return apiError('Neplatné číslo účtu nebo IBAN.');
+      }
+
       const hash = await hashPassword(password);
       await execute(
-        'INSERT INTO users (name, phone, email, boat_id, password_hash, role) VALUES ($1, $2, $3, $4, $5, $6)',
-        [name, phone || null, email || null, boat_id, hash, validRole]
+        'INSERT INTO users (name, phone, email, boat_id, password_hash, role, bank_account) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+        [name, phone || null, email || null, boat_id, hash, validRole, bank || null]
       );
 
       return apiSuccess();
     }
 
     if (action === 'edit') {
-      const { id, name, phone, email, boat_id, role } = body;
+      const { id, name, phone, email, boat_id, role, bank_account } = body;
       if (!id || !name || !boat_id) {
         return apiError('ID, name, and boat are required.');
       }
       const validRole = role === 'captain' ? 'captain' : 'crew';
 
+      // bank_account: empty clears it; otherwise must be a valid Czech account / IBAN
+      const bank = typeof bank_account === 'string' ? bank_account.trim() : '';
+      if (bank && !toIban(bank)) {
+        return apiError('Neplatné číslo účtu nebo IBAN.');
+      }
+
       await execute(
-        'UPDATE users SET name = $1, phone = $2, email = $3, boat_id = $4, role = $5 WHERE id = $6',
-        [name, phone || null, email || null, boat_id, validRole, id]
+        'UPDATE users SET name = $1, phone = $2, email = $3, boat_id = $4, role = $5, bank_account = $6 WHERE id = $7',
+        [name, phone || null, email || null, boat_id, validRole, bank || null, id]
       );
 
       return apiSuccess();
