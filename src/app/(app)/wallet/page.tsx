@@ -25,7 +25,7 @@ import {
 import { cn, getInitials, avatarColorClass } from '@/lib/utils';
 import { useI18n } from '@/lib/i18n/context';
 import { CURRENCIES, CURRENCY_CODES, formatCurrency, getCurrency, TRIP_CZK_RATE, formatTripCzk } from '@/lib/currencies';
-import { spaydForPayment, toIban } from '@/lib/czech-payment';
+import { spaydForPayment, describeAccount } from '@/lib/czech-payment';
 import { QRCodeSVG } from 'qrcode.react';
 import { formatDate, formatDateTime } from '@/lib/utils';
 
@@ -1416,6 +1416,7 @@ function SettlementsTab({
         const pairKey = `${s.from_user_id}-${s.to_user_id}`;
         const czk = Math.round(s.amount * TRIP_CZK_RATE * 100) / 100;
         const spayd = spaydForPayment(s.to_bank_account, czk, s.from_name);
+        const acct = describeAccount(s.to_bank_account);
         return (
         <motion.div key={`${s.from_user_id}-${s.to_user_id}`} variants={cardVariants}>
           <Card
@@ -1508,7 +1509,15 @@ function SettlementsTab({
                   <div className="text-center">
                     <div className="font-bold tabular-nums">{formatTripCzk(s.amount)}</div>
                     <div className="text-xs text-muted-foreground">{t('wallet.qrScanHint', { name: s.to_name })}</div>
-                    <div className="mt-1 text-[11px] tabular-nums text-muted-foreground/70 break-all">{toIban(s.to_bank_account)}</div>
+                    {acct && (
+                      <div className="mt-2 text-xs tabular-nums">
+                        <span className="font-medium">{acct.account}</span>
+                        {acct.bankName && <span className="text-muted-foreground"> · {acct.bankName}</span>}
+                      </div>
+                    )}
+                    <div className="mt-0.5 text-[11px] tabular-nums text-muted-foreground/70 break-all">
+                      {acct?.iban}
+                    </div>
                   </div>
                 </div>
               )}

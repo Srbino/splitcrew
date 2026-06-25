@@ -97,6 +97,77 @@ export function isPayableAccount(stored: string | null | undefined): boolean {
   return toIban(stored) !== null;
 }
 
+/** Common Czech bank codes → bank name (for human verification under the QR). */
+export const CZ_BANKS: Record<string, string> = {
+  '0100': 'Komerční banka',
+  '0300': 'ČSOB',
+  '0600': 'MONETA Money Bank',
+  '0710': 'Česká národní banka',
+  '0800': 'Česká spořitelna',
+  '2010': 'Fio banka',
+  '2070': 'TRINITY BANK',
+  '2250': 'Banka CREDITAS',
+  '2600': 'Citibank',
+  '2700': 'UniCredit Bank',
+  '3030': 'Air Bank',
+  '3050': 'BNP Paribas Personal Finance',
+  '3500': 'ING Bank',
+  '4000': 'Max banka',
+  '5500': 'Raiffeisenbank',
+  '5800': 'J&T Banka',
+  '6000': 'PPF banka',
+  '6100': 'Raiffeisenbank (Equa)',
+  '6210': 'mBank',
+  '6300': 'BNP Paribas',
+  '6800': 'Sberbank CZ',
+  '7940': 'Waldviertler Sparkasse',
+  '8030': 'Volksbank',
+  '8040': 'Oberbank',
+};
+
+export function bankName(code: string): string | null {
+  return CZ_BANKS[code] ?? null;
+}
+
+export interface AccountInfo {
+  account: string; // human "prefix-number/bankcode" (or the IBAN for foreign accounts)
+  prefix: string;
+  number: string;
+  bankCode: string;
+  bankName: string | null;
+  iban: string;
+}
+
+/** Describe a stored account for display: human account number, bank, IBAN. */
+export function describeAccount(stored: string | null | undefined): AccountInfo | null {
+  const iban = toIban(stored);
+  if (!iban || !stored) return null;
+
+  let acc = parseCzechAccount(stored.trim());
+  if (!acc) {
+    if (/^CZ\d{22}$/.test(iban)) {
+      // Stored as a Czech IBAN → reconstruct the domestic account number.
+      acc = {
+        bankCode: iban.slice(4, 8),
+        prefix: iban.slice(8, 14).replace(/^0+/, ''),
+        number: iban.slice(14, 24).replace(/^0+/, ''),
+      };
+    } else {
+      // Foreign IBAN — nothing domestic to show.
+      return { account: iban, prefix: '', number: '', bankCode: '', bankName: null, iban };
+    }
+  }
+  const human = (acc.prefix ? acc.prefix + '-' : '') + acc.number + '/' + acc.bankCode;
+  return {
+    account: human,
+    prefix: acc.prefix,
+    number: acc.number,
+    bankCode: acc.bankCode,
+    bankName: bankName(acc.bankCode),
+    iban,
+  };
+}
+
 export interface SpaydOptions {
   iban: string;
   amount: number; // in CZK
