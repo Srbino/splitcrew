@@ -90,6 +90,18 @@ export function formatCurrency(
 }
 
 /**
+ * Effective CZK/EUR rate actually used during the trip — the volume-weighted
+ * average of the real exchange_rate values stored on the trip's CZK expenses
+ * (102 533.50 CZK ÷ 4 237.10 EUR = 24.199). The settlement is shown in CZK at
+ * this rate so the crew sends each other the rate they actually transacted at,
+ * not today's drifting market rate.
+ */
+export const TRIP_CZK_RATE = 24.199;
+export function formatTripCzk(eur: number): string {
+  return formatCurrency(eur * TRIP_CZK_RATE, 'CZK', 'cs-CZ');
+}
+
+/**
  * Convert amount from one currency to the base currency using provided rate.
  * Rate is: 1 base_currency = X foreign_currency (e.g., 1 EUR = 25.21 CZK)
  */

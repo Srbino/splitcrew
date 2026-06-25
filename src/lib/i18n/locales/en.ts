@@ -167,7 +167,7 @@ const en = {
     overviewWhoOwes: 'Who owes whom',
     paymentsToSettle: '{{count}} payment(s) settle everyone — the fewest possible',
     settleTitle: 'Settlement — who owes whom',
-    settleHint: "The tick on each bar = that person's fair share (only from expenses they took part in). Hatched = amount to settle. Below each bar: who pays whom, in € and CZK (rate 24.20).",
+    settleHint: "The tick on each bar = that person's fair share (only from expenses they took part in). Hatched = amount to settle. Below each bar: who pays whom, in € and CZK (actual trip rate 24.20).",
     settlePaid: 'Paid',
     matrixTitle: 'Who paid what, by category',
     matrixTitleCost: 'What the trip cost each person, by category',

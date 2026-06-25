@@ -24,7 +24,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { cn, getInitials, avatarColorClass } from '@/lib/utils';
 import { useI18n } from '@/lib/i18n/context';
-import { CURRENCIES, CURRENCY_CODES, formatCurrency, getCurrency } from '@/lib/currencies';
+import { CURRENCIES, CURRENCY_CODES, formatCurrency, getCurrency, TRIP_CZK_RATE } from '@/lib/currencies';
 import { formatDate, formatDateTime } from '@/lib/utils';
 
 // ── Types ──
@@ -1439,10 +1439,14 @@ function SettlementsTab({
                 {showCurrencies.length > 0 && (
                   <div className="text-xs text-muted-foreground">
                     {showCurrencies.map(c => {
-                      const converted = Math.round(s.amount * (exchangeRates[c] ?? 1) * 100) / 100;
+                      // CZK uses the actual trip rate (what the crew transacted at);
+                      // any other currency falls back to the live cached rate.
+                      const isCzk = c === 'CZK';
+                      const rate = isCzk ? TRIP_CZK_RATE : (exchangeRates[c] ?? 1);
+                      const converted = Math.round(s.amount * rate * 100) / 100;
                       return (
                         <span key={c} className="mr-2">
-                          ~{formatCurrency(converted, c)}
+                          {formatCurrency(converted, c, isCzk ? 'cs-CZ' : 'en-US')}
                         </span>
                       );
                     })}

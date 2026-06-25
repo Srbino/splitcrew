@@ -6,15 +6,8 @@ import { ArrowRight, PieChart, Receipt, TrendingUp, Table2, Ship, Scale } from '
 import { Card, CardContent } from '@/components/ui/card';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { cn, getInitials, avatarColorClass, formatDate } from '@/lib/utils';
-import { formatCurrency } from '@/lib/currencies';
+import { formatCurrency, formatTripCzk as fmtCzk } from '@/lib/currencies';
 import { donutSegments } from '@/lib/wallet-calc';
-
-// Fixed CZK rate for the final settlement payout (the crew sends each other CZK,
-// not EUR). EUR stays the canonical/validated amount; CZK is shown alongside it.
-const SETTLEMENT_CZK_RATE = 24.2;
-function fmtCzk(eur: number): string {
-  return formatCurrency(eur * SETTLEMENT_CZK_RATE, 'CZK', 'cs-CZ');
-}
 
 // ── Types (mirror /api/wallet?action=summary) ──
 
