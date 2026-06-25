@@ -2,12 +2,19 @@
 
 import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowRight, PieChart, Users, Receipt, TrendingUp, Table2, Ship } from 'lucide-react';
+import { ArrowRight, PieChart, Users, Receipt, TrendingUp, Table2, Ship, Scale } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { cn, getInitials, avatarColorClass, formatDate } from '@/lib/utils';
 import { formatCurrency } from '@/lib/currencies';
 import { donutSegments, barScale } from '@/lib/wallet-calc';
+
+// Fixed CZK rate for the final settlement payout (the crew sends each other CZK,
+// not EUR). EUR stays the canonical/validated amount; CZK is shown alongside it.
+const SETTLEMENT_CZK_RATE = 24.2;
+function fmtCzk(eur: number): string {
+  return formatCurrency(eur * SETTLEMENT_CZK_RATE, 'CZK', 'cs-CZ');
+}
 
 // ── Types (mirror /api/wallet?action=summary) ──
 
@@ -153,6 +160,146 @@ function PayerBars({
         </div>
       ))}
     </div>
+  );
+}
+
+// ── Settlement leveling chart ──
+// Each person's bar is what they PAID. A dash-dot vertical line marks the average
+// per person. Everyone "levels" to their own fair share: the part of an
+// overpayer's bar above their share is hatched (= what they get refunded), and a
+// debtor's bar shows a dashed outline up to their share (= what they must top up).
+// Under each bar the actual settlement lines list who pays/receives, in € and Kč.
+
+function SettlementChart({
+  payers, settlements, toDisplay, baseCurrency, t,
+}: {
+  payers: PayerSlice[];
+  settlements: OweRow[];
+  toDisplay: (eur: number) => number;
+  baseCurrency: string;
+  t: (key: string, params?: Record<string, string | number>) => string;
+}) {
+  const outstanding = settlements.filter(s => !s.is_settled);
+  const netMap = new Map<number, number>();
+  const inMap = new Map<number, OweRow[]>();
+  const outMap = new Map<number, OweRow[]>();
+  const push = (m: Map<number, OweRow[]>, k: number, v: OweRow) => {
+    const arr = m.get(k); if (arr) arr.push(v); else m.set(k, [v]);
+  };
+  for (const s of outstanding) {
+    netMap.set(s.to_user_id, (netMap.get(s.to_user_id) ?? 0) + s.amount);
+    netMap.set(s.from_user_id, (netMap.get(s.from_user_id) ?? 0) - s.amount);
+    push(inMap, s.to_user_id, s);
+    push(outMap, s.from_user_id, s);
+  }
+
+  const N = payers.length || 1;
+  const avg = payers.reduce((a, p) => a + p.total, 0) / N;
+  const axisMax = Math.max(1, ...payers.map(p => {
+    const nt = netMap.get(p.paid_by) ?? 0;
+    return Math.max(p.total, p.total - nt); // debtor share = paid + |net|
+  }));
+  const avgPct = (avg / axisMax) * 100;
+
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1 flex items-center gap-1.5">
+          <Scale size={13} /> {t('wallet.settleTitle')}
+        </h3>
+        <p className="text-[11px] text-muted-foreground mb-4 leading-snug">
+          {t('wallet.settleHint', { avg: formatCurrency(toDisplay(avg), baseCurrency), avgczk: fmtCzk(avg) })}
+        </p>
+        <div className="space-y-3.5">
+          {payers.map(p => {
+            const nt = netMap.get(p.paid_by) ?? 0;
+            const paid = p.total;
+            const share = paid - nt;
+            const isCreditor = nt > 0.005;
+            const isDebtor = nt < -0.005;
+            const solidW = ((isCreditor ? share : paid) / axisMax) * 100;
+            const extraW = (Math.abs(nt) / axisMax) * 100;
+            const ins = inMap.get(p.paid_by) ?? [];
+            const outs = outMap.get(p.paid_by) ?? [];
+            return (
+              <div key={p.paid_by} className="flex items-start gap-3">
+                <Avi name={p.name} avatar={p.avatar} userId={p.paid_by} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex justify-between items-baseline gap-2 mb-1">
+                    <span className="text-sm font-medium truncate">{p.name}</span>
+                    <span className="text-xs tabular-nums shrink-0">
+                      {isCreditor && (
+                        <span className="text-green-600 dark:text-green-400">
+                          +{formatCurrency(toDisplay(nt), baseCurrency)} · {fmtCzk(nt)}
+                        </span>
+                      )}
+                      {isDebtor && (
+                        <span className="text-destructive">
+                          −{formatCurrency(toDisplay(-nt), baseCurrency)} · {fmtCzk(-nt)}
+                        </span>
+                      )}
+                      {!isCreditor && !isDebtor && (
+                        <span className="text-muted-foreground">{t('wallet.allSettledUp')}</span>
+                      )}
+                    </span>
+                  </div>
+                  {/* bar: solid = own share (debtor: paid), hatched/outline = amount to settle */}
+                  <div className="relative h-3 rounded-full bg-muted overflow-hidden flex">
+                    <div className="h-full bg-primary" style={{ width: `${solidW}%` }} />
+                    {isCreditor && extraW > 0 && (
+                      <div
+                        className="h-full"
+                        style={{
+                          width: `${extraW}%`,
+                          backgroundImage:
+                            'repeating-linear-gradient(45deg, var(--primary) 0px, var(--primary) 2px, transparent 2px, transparent 5px)',
+                        }}
+                      />
+                    )}
+                    {isDebtor && extraW > 0 && (
+                      <div
+                        className="h-full border-y border-r border-dashed border-primary/70"
+                        style={{ width: `${extraW}%` }}
+                      />
+                    )}
+                    {/* average per-person line (dash-dot) */}
+                    <div
+                      className="absolute inset-y-0 w-px"
+                      style={{
+                        left: `${avgPct}%`,
+                        backgroundImage:
+                          'repeating-linear-gradient(to bottom, var(--foreground) 0px, var(--foreground) 2px, transparent 2px, transparent 4px)',
+                      }}
+                    />
+                  </div>
+                  <div className="text-[10px] text-muted-foreground mt-0.5 tabular-nums">
+                    {t('wallet.settlePaid')}: {formatCurrency(toDisplay(paid), baseCurrency)} · {fmtCzk(paid)}
+                  </div>
+                  {ins.map(s => (
+                    <div key={`in-${s.from_user_id}`} className="flex items-center gap-1.5 text-[11px] mt-1">
+                      <ArrowRight size={11} className="text-green-600 dark:text-green-400 rotate-180 shrink-0" />
+                      <span className="truncate">{s.from_name}</span>
+                      <span className="ml-auto tabular-nums font-medium shrink-0">
+                        {formatCurrency(toDisplay(s.amount), baseCurrency)} · {fmtCzk(s.amount)}
+                      </span>
+                    </div>
+                  ))}
+                  {outs.map(s => (
+                    <div key={`out-${s.to_user_id}`} className="flex items-center gap-1.5 text-[11px] mt-1">
+                      <ArrowRight size={11} className="text-destructive shrink-0" />
+                      <span className="truncate">{s.to_name}</span>
+                      <span className="ml-auto tabular-nums font-medium shrink-0">
+                        {formatCurrency(toDisplay(s.amount), baseCurrency)} · {fmtCzk(s.amount)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -408,6 +555,17 @@ export function WalletOverview({
         </CardContent>
       </Card>
 
+      {/* Settlement leveling chart — levels everyone to their fair share */}
+      {by_payer.length > 0 && (
+        <SettlementChart
+          payers={by_payer}
+          settlements={settlements}
+          toDisplay={toDisplay}
+          baseCurrency={baseCurrency}
+          t={t}
+        />
+      )}
+
       {/* Cost per boat */}
       {data.by_boat && data.by_boat.length > 0 && (
         <Card>
@@ -467,8 +625,13 @@ export function WalletOverview({
                   <ArrowRight size={14} className="text-muted-foreground shrink-0" />
                   <Avi name={s.to_name} avatar={s.to_avatar} userId={s.to_user_id} />
                   <span className="font-medium truncate">{s.to_name}</span>
-                  <span className="ml-auto font-bold tabular-nums text-destructive shrink-0">
-                    {formatCurrency(toDisplay(s.amount), baseCurrency)}
+                  <span className="ml-auto text-right shrink-0 leading-tight">
+                    <span className="block font-bold tabular-nums text-destructive">
+                      {formatCurrency(toDisplay(s.amount), baseCurrency)}
+                    </span>
+                    <span className="block text-[11px] font-medium tabular-nums text-muted-foreground">
+                      {fmtCzk(s.amount)}
+                    </span>
                   </span>
                 </div>
               ))}
