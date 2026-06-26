@@ -1,14 +1,15 @@
 'use client';
 
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import Link from 'next/link';
-import { Moon, Sun, LogOut, Camera, Sailboat, ChevronRight, X, Languages } from 'lucide-react';
+import { Moon, Sun, LogOut, Camera, Sailboat, ChevronRight, X, Languages, Landmark } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
 import { cn, getInitials, avatarColorClass } from '@/lib/utils';
 import { useI18n } from '@/lib/i18n/context';
 import { NAV_ITEMS, ADMIN_NAV_ITEM, type NavItem } from './nav-items';
+import { BankAccountModal } from './bank-account-modal';
 
 interface MobileDrawerProps {
   open: boolean;
@@ -34,6 +35,7 @@ export function MobileDrawer({
 }: MobileDrawerProps) {
   const { t } = useI18n();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showBank, setShowBank] = useState(false);
   const avatarSrc = user.avatar ? (user.avatar.startsWith('data:') || user.avatar.startsWith('http') ? user.avatar : `/${user.avatar}`) : null;
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -137,6 +139,13 @@ export function MobileDrawer({
           <div className="p-3 border-t border-border space-y-1">
             <button
               className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-[13px] font-medium text-foreground hover:bg-accent transition-colors border-none bg-transparent cursor-pointer"
+              onClick={() => setShowBank(true)}
+            >
+              <Landmark size={17} />
+              <span>{t('wallet.bankAccount')}</span>
+            </button>
+            <button
+              className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-[13px] font-medium text-foreground hover:bg-accent transition-colors border-none bg-transparent cursor-pointer"
               onClick={onToggleTheme}
             >
               {theme === 'light' ? <Moon size={17} /> : <Sun size={17} />}
@@ -162,6 +171,8 @@ export function MobileDrawer({
           </div>
         </SheetContent>
       </Sheet>
+
+      <BankAccountModal open={showBank} onClose={() => setShowBank(false)} />
     </>
   );
 }
